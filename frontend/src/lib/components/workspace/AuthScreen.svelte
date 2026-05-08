@@ -1,0 +1,72 @@
+<script lang="ts">
+  import type { AuthMode } from '$lib/workspace/ui';
+
+  export let authMode: AuthMode = 'login';
+  export let authUsername = 'demo';
+  export let authPassword = 'demo123';
+  export let authDisplayName = '';
+  export let error = '';
+  export let loading = false;
+  export let submitAuth: () => void | Promise<void>;
+
+  function switchToLogin() {
+    authMode = 'login';
+    authUsername = 'demo';
+    authPassword = 'demo123';
+  }
+
+  function switchToRegister() {
+    authMode = 'register';
+    authUsername = '';
+    authPassword = '';
+  }
+</script>
+
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="brand-mark">SP</div>
+      <div>
+        <div class="brand-title">ShortPlay Studio</div>
+        <div class="brand-subtitle">短剧内容生产工作台</div>
+      </div>
+    </div>
+
+    <h1>{authMode === 'login' ? '登录工作台' : '注册账号'}</h1>
+    <p>注册后获得 1000 初始积分。生成分镜、视频、素材和合成成片会按规则扣减积分。</p>
+
+    {#if error}<div class="error">{error}</div>{/if}
+    {#if loading}<div class="loading compact">正在验证登录状态...</div>{/if}
+
+    <div class="auth-tabs">
+      <button class:active={authMode === 'login'} on:click={switchToLogin}>登录</button>
+      <button class:active={authMode === 'register'} on:click={switchToRegister}>注册</button>
+    </div>
+
+    <div class="field">
+      <label for="auth-username">用户名</label>
+      <input id="auth-username" bind:value={authUsername} placeholder="请输入用户名" />
+    </div>
+
+    {#if authMode === 'register'}
+      <div class="field">
+        <label for="auth-display-name">显示名称</label>
+        <input id="auth-display-name" bind:value={authDisplayName} placeholder="用于项目协作中的展示名称" />
+      </div>
+    {/if}
+
+    <div class="field">
+      <label for="auth-password">密码</label>
+      <input id="auth-password" type="password" bind:value={authPassword} placeholder="至少 6 位" on:keydown={(event) => event.key === 'Enter' && submitAuth()} />
+    </div>
+
+    <button class="btn btn-primary auth-submit" on:click={submitAuth}>
+      {authMode === 'login' ? '登录' : '注册并进入'}
+    </button>
+
+    <div class="auth-hint">
+      <b>演示账号：</b> demo / demo123<br />
+      <b>管理员：</b> admin / admin123
+    </div>
+  </div>
+</div>

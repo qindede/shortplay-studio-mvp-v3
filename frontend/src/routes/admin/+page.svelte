@@ -104,15 +104,10 @@
             <b>{currentUser?.display_name || '管理员'}</b>
             <span>@{currentUser?.username || 'admin'}</span>
           </div>
-          <div class="sidebar-user-points">Admin</div>
-        </div>
-        <div class="sidebar-user-actions">
-          <button class="btn btn-secondary" on:click={refreshAdminData}>刷新</button>
-          <button class="btn btn-secondary" on:click={logout}>退出</button>
+          <div class="sidebar-user-points">退出</div>
         </div>
       </div>
 
-      <div class="admin-note-v2">后台只保留平台运营管理能力，不包含项目、剧集、素材、分镜、视频生成等内容生产功能。</div>
     </div>
   </aside>
 
@@ -146,7 +141,7 @@
 
         {#if activeTab === 'points'}
           <div class="admin-layout">
-            <div class="panel"><div class="panel-head"><div><div class="panel-title">调整积分</div><div class="panel-subtitle">正数为充值，负数为扣减。</div></div></div><div class="panel-body"><div class="field"><label>选择用户</label><select bind:value={selectedUserId}>{#each users as user}<option value={user.id}>{user.display_name} / @{user.username} / {user.points}积分</option>{/each}</select></div><div class="field"><label>调整积分</label><input type="number" bind:value={amount} /></div><div class="field"><label>操作原因</label><input bind:value={reason} /></div><button class="btn btn-primary" style="width:100%;" on:click={adjustPoints}>提交调整</button></div></div>
+            <div class="panel"><div class="panel-head"><div><div class="panel-title">调整积分</div><div class="panel-subtitle">正数为充值，负数为扣减。</div></div></div><div class="panel-body"><div class="field"><label for="admin-selected-user">选择用户</label><select id="admin-selected-user" bind:value={selectedUserId}>{#each users as user}<option value={user.id}>{user.display_name} / @{user.username} / {user.points}积分</option>{/each}</select></div><div class="field"><label for="admin-amount">调整积分</label><input id="admin-amount" type="number" bind:value={amount} /></div><div class="field"><label for="admin-reason">操作原因</label><input id="admin-reason" bind:value={reason} /></div><button class="btn btn-primary" style="width:100%;" on:click={adjustPoints}>提交调整</button></div></div>
             <div class="panel"><div class="panel-head"><div><div class="panel-title">积分规则</div><div class="panel-subtitle">MVP 固定规则，后续可做平台配置。</div></div></div><div class="panel-body rule-grid"><div class="rule-card"><b>注册赠送</b><span>1000 积分</span></div><div class="rule-card"><b>生成分镜</b><span>10 积分 / 次</span></div><div class="rule-card"><b>生成视频</b><span>10 积分 / 秒</span></div><div class="rule-card"><b>合成成片</b><span>30 积分 / 次</span></div></div></div>
           </div>
         {/if}
