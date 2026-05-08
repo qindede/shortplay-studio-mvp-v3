@@ -14,22 +14,22 @@
 
 <div class="metrics">
   <div class="metric-card point-metric"><div class="metric-label">当前积分</div><div class="metric-value">{pointBalance}</div><div class="metric-note">账号：{currentUser.display_name}</div></div>
-  <div class="metric-card"><div class="metric-label">视频生成额度</div><div class="metric-value">{usage ? usage.video_total_seconds - usage.video_used_seconds : 0}s</div><div class="metric-note">已用 {usage?.video_used_seconds || 0}s / {videoUsedPercent}%</div></div>
-  <div class="metric-card"><div class="metric-label">图片生成额度</div><div class="metric-value">{usage ? usage.image_total - usage.image_used : 0}</div><div class="metric-note">已用 {usage?.image_used || 0} 张 / {imageUsedPercent}%</div></div>
-  <div class="metric-card"><div class="metric-label">高清导出额度</div><div class="metric-value">{usage ? usage.export_total - usage.export_used : 0}</div><div class="metric-note">已用 {usage?.export_used || 0} 条 / {exportUsedPercent}%</div></div>
+  <div class="metric-card"><div class="metric-label">视频生成</div><div class="metric-value">{usage ? usage.video_total_seconds - usage.video_used_seconds : 0}s</div><div class="metric-note">已用 {usage?.video_used_seconds || 0}s / {videoUsedPercent}%</div></div>
+  <div class="metric-card"><div class="metric-label">图片生成</div><div class="metric-value">{usage ? usage.image_total - usage.image_used : 0}</div><div class="metric-note">已用 {usage?.image_used || 0} 张 / {imageUsedPercent}%</div></div>
+  <div class="metric-card"><div class="metric-label">高清导出</div><div class="metric-value">{usage ? usage.export_total - usage.export_used : 0}</div><div class="metric-note">已用 {usage?.export_used || 0} 条 / {exportUsedPercent}%</div></div>
 </div>
 
 <div class="account-layout">
   <div class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">积分消耗规则</div>
-        <div class="panel-subtitle">MVP 先使用固定规则，后续可改成后台可配置套餐。</div>
+        <div class="panel-title">积分规则</div>
+        <div class="panel-subtitle">MVP 阶段使用固定规则，后续可扩展成后台可配置套餐。</div>
       </div>
     </div>
 
     <div class="panel-body rule-grid">
-      <div class="rule-card"><b>生成/更新分镜</b><span>10 积分 / 次</span></div>
+      <div class="rule-card"><b>生成 / 更新分镜</b><span>10 积分 / 次</span></div>
       <div class="rule-card"><b>生成视频</b><span>10 积分 / 秒</span></div>
       <div class="rule-card"><b>创建视觉素材</b><span>20 积分 / 个</span></div>
       <div class="rule-card"><b>合成成片</b><span>30 积分 / 次</span></div>
@@ -39,8 +39,8 @@
   <div class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">积分明细</div>
-        <div class="panel-subtitle">展示当前账号最近 100 条积分增减记录。</div>
+        <div class="panel-title">积分流水</div>
+        <div class="panel-subtitle">展示当前账号最近 100 条积分变化。</div>
       </div>
     </div>
 

@@ -23,50 +23,62 @@
 </script>
 
 <div class="auth-shell">
-  <div class="auth-card">
-    <div class="auth-brand">
-      <div class="brand-mark">SP</div>
-      <div>
-        <div class="brand-title">ShortPlay Studio</div>
-        <div class="brand-subtitle">短剧内容生产工作台</div>
+  <div class="auth-stage">
+    <div class="auth-poster">
+      <div class="poster-frame frame-a"></div>
+      <div class="poster-frame frame-b"></div>
+      <div class="poster-frame frame-c"></div>
+      <div class="auth-headline">
+        <span>AI Short Drama Lab</span>
+        <h1>把爆款短剧，从一句梗概推进到可导出的竖屏成片。</h1>
       </div>
     </div>
 
-    <h1>{authMode === 'login' ? '登录工作台' : '注册账号'}</h1>
-    <p>注册后获得 1000 初始积分。生成分镜、视频、素材和合成成片会按规则扣减积分。</p>
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-mark">SP</div>
+        <div>
+          <div class="brand-title">ShortPlay Studio</div>
+          <div class="brand-subtitle">短剧内容创作舱</div>
+        </div>
+      </div>
 
-    {#if error}<div class="error">{error}</div>{/if}
-    {#if loading}<div class="loading compact">正在验证登录状态...</div>{/if}
+      <h2>{authMode === 'login' ? '进入工作室' : '创建创作者账号'}</h2>
+      <p>注册后获得 1000 初始积分。分镜、视频、素材和成片合成会按规则消耗积分。</p>
 
-    <div class="auth-tabs">
-      <button class:active={authMode === 'login'} on:click={switchToLogin}>登录</button>
-      <button class:active={authMode === 'register'} on:click={switchToRegister}>注册</button>
-    </div>
+      {#if error}<div class="error">{error}</div>{/if}
+      {#if loading}<div class="loading compact">正在验证登录状态...</div>{/if}
 
-    <div class="field">
-      <label for="auth-username">用户名</label>
-      <input id="auth-username" bind:value={authUsername} placeholder="请输入用户名" />
-    </div>
+      <div class="auth-tabs">
+        <button class:active={authMode === 'login'} on:click={switchToLogin}>登录</button>
+        <button class:active={authMode === 'register'} on:click={switchToRegister}>注册</button>
+      </div>
 
-    {#if authMode === 'register'}
       <div class="field">
-        <label for="auth-display-name">显示名称</label>
-        <input id="auth-display-name" bind:value={authDisplayName} placeholder="用于项目协作中的展示名称" />
+        <label for="auth-username">用户名</label>
+        <input id="auth-username" bind:value={authUsername} placeholder="请输入用户名" />
       </div>
-    {/if}
 
-    <div class="field">
-      <label for="auth-password">密码</label>
-      <input id="auth-password" type="password" bind:value={authPassword} placeholder="至少 6 位" on:keydown={(event) => event.key === 'Enter' && submitAuth()} />
-    </div>
+      {#if authMode === 'register'}
+        <div class="field">
+          <label for="auth-display-name">显示名称</label>
+          <input id="auth-display-name" bind:value={authDisplayName} placeholder="用于项目协作中的展示名称" />
+        </div>
+      {/if}
 
-    <button class="btn btn-primary auth-submit" on:click={submitAuth}>
-      {authMode === 'login' ? '登录' : '注册并进入'}
-    </button>
+      <div class="field">
+        <label for="auth-password">密码</label>
+        <input id="auth-password" type="password" bind:value={authPassword} placeholder="至少 6 位" on:keydown={(event) => event.key === 'Enter' && submitAuth()} />
+      </div>
 
-    <div class="auth-hint">
-      <b>演示账号：</b> demo / demo123<br />
-      <b>管理员：</b> admin / admin123
+      <button class="btn btn-primary auth-submit" on:click={submitAuth}>
+        {authMode === 'login' ? '登录工作室' : '注册并进入'}
+      </button>
+
+      <div class="auth-hint">
+        <b>演示账号：</b> demo / demo123<br />
+        <b>管理员：</b> admin / admin123
+      </div>
     </div>
   </div>
 </div>

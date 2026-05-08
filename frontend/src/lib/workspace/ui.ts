@@ -11,33 +11,33 @@ interface PageMeta {
 
 export const pageMeta: Record<PageKey, PageMeta> = {
   projects: {
-    title: '项目中心',
-    description: '管理短剧项目、剧集、素材和视频版本',
+    title: '创作宇宙',
+    description: '从项目、剧集、素材到成片，掌控整条短剧生产线',
     actionLabel: '新建项目'
   },
   episodes: {
-    title: '剧集管理',
-    description: '当前项目下的多集内容',
+    title: '剧集编排',
+    description: '把故事拆成连续节奏，快速推进每一集的制作状态',
     actionLabel: '新建剧集'
   },
   script: {
-    title: '剧情与分镜',
-    description: '编辑剧情并逐镜头生成视频',
-    actionLabel: '保存并生成'
+    title: '脚本与分镜',
+    description: '编辑剧情、生成镜头，让文本进入可拍摄状态',
+    actionLabel: '生成分镜'
   },
   assets: {
-    title: '素材库',
-    description: '项目素材可被所有剧集复用',
+    title: '角色与场景库',
+    description: '沉淀可复用的角色、场景、图片和声音资产',
     actionLabel: '新建素材'
   },
   video: {
-    title: '视频中心',
-    description: '查看任务、片段和成片版本',
+    title: '成片控制台',
+    description: '查看片段生成、版本合成和竖屏导出状态',
     actionLabel: '合成视频'
   },
   account: {
-    title: '额度与导出',
-    description: '团队额度与默认导出设置',
+    title: '额度与账户',
+    description: '查看积分、生成额度和最近的消耗流水',
     actionLabel: '购买额度'
   }
 };
@@ -47,7 +47,7 @@ const statusLabels: Record<Status, string> = {
   review: '待审核',
   draft: '草稿',
   completed: '已完成',
-  storyboard_ready: '已生成',
+  storyboard_ready: '分镜就绪',
   generating: '生成中',
   pending: '待生成',
   needs_review: '待优化',

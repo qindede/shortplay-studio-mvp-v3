@@ -28,11 +28,11 @@
 {#if selectedEpisode}
   <div class="workspace-layout">
     <div>
-      <div class="panel">
+      <div class="panel script-editor">
         <div class="panel-head">
           <div>
-            <div class="panel-title">本集剧情</div>
-            <div class="panel-subtitle">修改剧情后可重新拆分镜，也可只保存草稿。</div>
+            <div class="panel-title">本集脚本</div>
+            <div class="panel-subtitle">先打磨情绪曲线，再生成可以直接进入视频生产的镜头表。</div>
           </div>
           <button class="btn btn-secondary" on:click={saveEpisodeOnly}>保存草稿</button>
         </div>
@@ -59,18 +59,18 @@
       <div class="panel">
         <div class="panel-head">
           <div>
-            <div class="panel-title">本集分镜</div>
-            <div class="panel-subtitle">每个镜头可单独生成、替换、重生成。</div>
+            <div class="panel-title">镜头表</div>
+            <div class="panel-subtitle">每个镜头都可以独立进入视频生成，并保留状态回看。</div>
           </div>
-          <div>
-            <button class="btn btn-secondary" on:click={saveAndGenerateStoryboard}>生成/更新分镜</button>
+          <div class="panel-actions">
+            <button class="btn btn-secondary" on:click={saveAndGenerateStoryboard}>生成 / 更新分镜</button>
             <button class="btn btn-primary" on:click={batchGenerateVideos}>批量生成视频</button>
           </div>
         </div>
 
         <div class="panel-body table-wrap">
           <table class="table">
-            <thead><tr><th>镜头</th><th>画面描述</th><th>台词/旁白</th><th>角色/场景</th><th>时长</th><th>状态</th></tr></thead>
+            <thead><tr><th>镜头</th><th>画面</th><th>台词 / 旁白</th><th>角色 / 场景</th><th>时长</th><th>状态</th></tr></thead>
             <tbody>
               {#each shots as shot}
                 <tr>
@@ -82,7 +82,7 @@
                   <td><span class={'status ' + getStatusClass(shot.status)}>{getStatusLabel(shot.status)}</span></td>
                 </tr>
               {:else}
-                <tr><td colspan="6"><div class="sub-text">暂无分镜，点击「生成/更新分镜」。</div></td></tr>
+                <tr><td colspan="6"><div class="sub-text">暂无分镜。点击“生成 / 更新分镜”后，镜头表会出现在这里。</div></td></tr>
               {/each}
             </tbody>
           </table>
@@ -94,26 +94,28 @@
       <div class="export-card">
         <div class="title">本集概览</div>
         <div class="export-row"><span>所属项目</span><b>{currentProject?.short_name}</b></div>
-        <div class="export-row"><span>当前剧集</span><b>第{String(selectedEpisode.no).padStart(2, '0')}集</b></div>
-        <div class="export-row"><span>分镜数量</span><b>{shots.length}镜头</b></div>
-        <div class="export-row"><span>成片版本</span><b>{versions.length}个</b></div>
+        <div class="export-row"><span>当前剧集</span><b>第 {String(selectedEpisode.no).padStart(2, '0')} 集</b></div>
+        <div class="export-row"><span>镜头数量</span><b>{shots.length} 镜头</b></div>
+        <div class="export-row"><span>成片版本</span><b>{versions.length} 个</b></div>
         <div class="export-row"><span>预计时长</span><b>{episodeDuration}s</b></div>
       </div>
 
-      <div class="panel" style="margin-top:16px;">
+      <div class="panel companion-panel">
         <div class="panel-head">
           <div>
             <div class="panel-title">本集素材</div>
-            <div class="panel-subtitle">从项目素材库选择。</div>
+            <div class="panel-subtitle">从项目素材库复用角色和场景。</div>
           </div>
         </div>
 
         <div class="panel-body">
           <div class="info-card"><div class="label">角色</div><div class="value">{characterNames}</div></div>
           <div class="info-card"><div class="label">场景</div><div class="value">{sceneName}</div></div>
-          <button class="btn btn-secondary" style="width:100%;" on:click={() => setPage('assets')}>管理素材</button>
+          <button class="btn btn-secondary full-width" on:click={() => setPage('assets')}>管理素材</button>
         </div>
       </div>
     </div>
   </div>
+{:else}
+  <div class="empty-card page-empty"><div><b>还没有选中剧集</b><span>请先在剧集编排中选择或新建一集。</span></div></div>
 {/if}

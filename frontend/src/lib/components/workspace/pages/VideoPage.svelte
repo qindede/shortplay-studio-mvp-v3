@@ -16,8 +16,8 @@
     <div class="panel">
       <div class="panel-head">
         <div>
-          <div class="panel-title">第{String(selectedEpisode?.no || 0).padStart(2, '0')}集视频任务</div>
-          <div class="panel-subtitle">分镜视频片段生成状态。</div>
+          <div class="panel-title">第 {String(selectedEpisode?.no || 0).padStart(2, '0')} 集视频任务</div>
+          <div class="panel-subtitle">跟踪每个镜头片段的生成进度。</div>
         </div>
       </div>
 
@@ -35,7 +35,7 @@
                 <td>{task.updated_at}</td>
               </tr>
             {:else}
-              <tr><td colspan="6"><div class="sub-text">暂无视频任务，请先在「剧情与分镜」生成分镜并批量生成视频。</div></td></tr>
+              <tr><td colspan="6"><div class="sub-text">暂无视频任务。请先在“脚本与分镜”中生成分镜并批量生成视频。</div></td></tr>
             {/each}
           </tbody>
         </table>
@@ -46,7 +46,7 @@
       <div class="panel-head">
         <div>
           <div class="panel-title">成片版本</div>
-          <div class="panel-subtitle">同一剧集可保留多个开头和节奏版本。</div>
+          <div class="panel-subtitle">为同一集保留不同开头、节奏和导出方案。</div>
         </div>
       </div>
 
@@ -57,6 +57,8 @@
               <div class={'video-thumb ' + version.theme}><div class="play"></div></div>
               <div class="video-body"><div class="video-name">{version.name}</div><div class="video-desc">{version.description} / {version.ratio}</div></div>
             </div>
+          {:else}
+            <div class="empty-card"><div><b>暂无成片版本</b><span>合成后会在这里展示不同版本。</span></div></div>
           {/each}
         </div>
       </div>
@@ -66,12 +68,12 @@
   <div>
     <div class="export-card">
       <div class="title">本集导出</div>
-      <div class="export-row"><span>当前剧集</span><b>第{String(selectedEpisode?.no || 0).padStart(2, '0')}集</b></div>
+      <div class="export-row"><span>当前剧集</span><b>第 {String(selectedEpisode?.no || 0).padStart(2, '0')} 集</b></div>
       <div class="export-row"><span>视频比例</span><b>9:16</b></div>
       <div class="export-row"><span>清晰度</span><b>1080P</b></div>
       <div class="export-row"><span>字幕样式</span><b>白字黑边</b></div>
-      <div class="export-row"><span>镜头状态</span><b>{completedShots}/{shots.length}完成</b></div>
-      <button class="btn btn-blue" style="width:100%; margin-top:14px;" on:click={composeVideo}>合成本集视频</button>
+      <div class="export-row"><span>镜头状态</span><b>{completedShots}/{shots.length} 完成</b></div>
+      <button class="btn btn-blue full-width export-action" on:click={composeVideo}>合成本集视频</button>
     </div>
   </div>
 </div>
