@@ -1,0 +1,223 @@
+const API_BASE = import.meta.env.VITE_API_BASE || '';
+
+let authToken = '';
+
+export function loadAuthToken() {
+  if (typeof localStorage === 'undefined') return '';
+  authToken = localStorage.getItem('shortplay_token') || '';
+  return authToken;
+}
+
+export function setAuthToken(token: string) {
+  authToken = token;
+  if (typeof localStorage !== 'undefined') localStorage.setItem('shortplay_token', token);
+}
+
+export function clearAuthToken() {
+  authToken = '';
+  if (typeof localStorage !== 'undefined') localStorage.removeItem('shortplay_token');
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { 'X-User-Token': authToken } : {}),
+      ...(options.headers || {})
+    },
+    ...options
+  });
+
+  if (!response.ok) {
+    let message = `Request failed: ${response.status}`;
+    try {
+      const body = await response.json();
+      message = body.detail || message;
+    } catch {
+      const text = await response.text();
+      message = text || message;
+    }
+    throw new Error(message);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export type Status = 'active' | 'review' | 'draft' | 'completed' | 'storyboard_ready' | 'generating' | 'pending' | 'needs_review' | 'exported';
+export type UserRole = 'user' | 'admin';
+export type UserStatus = 'active' | 'disabled';
+
+export interface User {
+  id: string;
+  username: string;
+  display_name: string;
+  role: UserRole;
+  status: UserStatus;
+  points: number;
+  created_at: string;
+  last_login: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
+export interface PointLedger {
+  id: string;
+  user_id: string;
+  username: string;
+  display_name: string;
+  amount: number;
+  type: string;
+  scene: string;
+  description: string;
+  balance_after: number;
+  created_at: string;
+}
+
+export interface AdminSummary {
+  user_count: number;
+  active_user_count: number;
+  total_balance: number;
+  consumed_points: number;
+  granted_points: number;
+  ledger_count: number;
+}
+
+export interface Dashboard {
+  project_count: number;
+  episode_count: number;
+  version_count: number;
+  asset_count: number;
+  usage: Usage;
+  current_user?: User;
+}
+
+export interface Usage {
+  video_total_seconds: number;
+  video_used_seconds: number;
+  image_total: number;
+  image_used: number;
+  export_total: number;
+  export_used: number;
+  team_members: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  short_name: string;
+  description: string;
+  status: Status;
+  status_label: string;
+  owner: string;
+  cover: string;
+  updated_at: string;
+  episode_count: number;
+  asset_count: number;
+  version_count: number;
+}
+
+export interface Episode {
+  id: string;
+  project_id: string;
+  no: number;
+  title: string;
+  summary: string;
+  script: string;
+  duration_target: number;
+  status: Status;
+  status_label: string;
+  updated_at: string;
+  shot_count: number;
+  version_count: number;
+}
+
+export interface Shot {
+  id: string;
+  episode_id: string;
+  no: number;
+  title: string;
+  visual: string;
+  dialogue: string;
+  characters: string[];
+  scene: string;
+  duration: number;
+  status: Status;
+  updated_at: string;
+}
+
+export interface Asset {
+  id: string;
+  project_id: string;
+  type: 'character' | 'scene' | 'image' | 'audio';
+  name: string;
+  description: string;
+  ref_count: number;
+  initial: string;
+  updated_at: string;
+}
+
+export interface VideoTask {
+  id: string;
+  episode_id: string;
+  shot_id: string;
+  title: string;
+  duration: number;
+  progress: number;
+  status: Status;
+  updated_at: string;
+}
+
+export interface VideoVersion {
+  id: string;
+  project_id: string;
+  episode_id: string;
+  name: string;
+  description: string;
+  duration: number;
+  ratio: string;
+  status: Status;
+  theme: string;
+  created_at: string;
+}
+
+export const api = {
+  register: (body: { username: string; password: string; display_name?: string }) =>
+    request<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) }),
+  login: (body: { username: string; password: string }) =>
+    request<AuthResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  me: () => request<User>('/api/me'),
+  myLedger: () => request<PointLedger[]>('/api/me/point-ledger'),
+
+  dashboard: () => request<Dashboard>('/api/dashboard'),
+  projects: () => request<Project[]>('/api/projects'),
+  createProject: (body: { name: string; description: string; owner?: string }) =>
+    request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
+  episodes: (projectId: string) => request<Episode[]>(`/api/projects/${projectId}/episodes`),
+  createEpisode: (projectId: string, body: { title: string; summary: string; script: string; duration_target: number }) =>
+    request<Episode>(`/api/projects/${projectId}/episodes`, { method: 'POST', body: JSON.stringify(body) }),
+  updateEpisode: (episodeId: string, body: Partial<Episode>) =>
+    request<Episode>(`/api/episodes/${episodeId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  shots: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/shots`),
+  generateStoryboard: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/generate-storyboard`, { method: 'POST' }),
+  generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
+  videoTasks: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/video-tasks`),
+  assets: (projectId: string, type?: string) => request<Asset[]>(`/api/projects/${projectId}/assets${type ? `?type=${type}` : ''}`),
+  createAsset: (projectId: string, body: { type: string; name: string; description: string; initial: string }) =>
+    request<Asset>(`/api/projects/${projectId}/assets`, { method: 'POST', body: JSON.stringify(body) }),
+  versions: (projectId: string, episodeId?: string) =>
+    request<VideoVersion[]>(`/api/projects/${projectId}/video-versions${episodeId ? `?episode_id=${episodeId}` : ''}`),
+  compose: (episodeId: string, body: { name?: string; description?: string; ratio?: string; duration?: number }) =>
+    request<VideoVersion>(`/api/episodes/${episodeId}/compose`, { method: 'POST', body: JSON.stringify(body) }),
+  usage: () => request<Usage>('/api/usage'),
+
+  adminSummary: () => request<AdminSummary>('/api/admin/summary'),
+  adminUsers: () => request<User[]>('/api/admin/users'),
+  adminLedger: (userId?: string) => request<PointLedger[]>(`/api/admin/point-ledger${userId ? `?user_id=${userId}` : ''}`),
+  adminAdjustPoints: (userId: string, body: { amount: number; reason: string }) =>
+    request<{ entry: PointLedger; user: User }>(`/api/admin/users/${userId}/points`, { method: 'POST', body: JSON.stringify(body) }),
+  adminUpdateUser: (userId: string, body: { role?: UserRole; status?: UserStatus }) =>
+    request<User>(`/api/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) })
+};
