@@ -95,7 +95,25 @@
       <button class:active={activeTab === 'ledger'} class="nav-item" on:click={() => activeTab = 'ledger'}><span class="nav-icon">流</span><span>积分流水</span></button>
     </div>
 
-    <div class="admin-note-v2">后台只保留平台运营管理能力，不包含项目、剧集、素材、分镜、视频生成等内容生产功能。</div>
+    <div class="admin-side-footer">
+      <div class="sidebar-user-card sidebar-user-card-dark">
+        <div class="switcher-label">当前登录</div>
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar">{(currentUser?.display_name || '管理员').slice(0, 1)}</div>
+          <div class="sidebar-user-copy">
+            <b>{currentUser?.display_name || '管理员'}</b>
+            <span>@{currentUser?.username || 'admin'}</span>
+          </div>
+          <div class="sidebar-user-points">Admin</div>
+        </div>
+        <div class="sidebar-user-actions">
+          <button class="btn btn-secondary" on:click={refreshAdminData}>刷新</button>
+          <button class="btn btn-secondary" on:click={logout}>退出</button>
+        </div>
+      </div>
+
+      <div class="admin-note-v2">后台只保留平台运营管理能力，不包含项目、剧集、素材、分镜、视频生成等内容生产功能。</div>
+    </div>
   </aside>
 
   <main class="main">
@@ -103,11 +121,6 @@
       <div>
         <div class="crumbs"><span>管理员后台</span><span>/</span><strong>{activeTab === 'overview' ? '运营概览' : activeTab === 'users' ? '用户管理' : activeTab === 'points' ? '积分调整' : '积分流水'}</strong></div>
         <div class="sub-context">平台运营、用户与积分管理</div>
-      </div>
-      <div class="top-actions">
-        <div class="user-pill"><span>{currentUser?.display_name || '管理员'}</span><b>Admin</b></div>
-        <button class="btn btn-secondary" on:click={refreshAdminData}>刷新</button>
-        <button class="btn btn-secondary" on:click={logout}>退出</button>
       </div>
     </div>
 
@@ -119,9 +132,6 @@
         {#if message}<div class="success">{message}</div>{/if}
 
         {#if activeTab === 'overview'}
-          <div class="page-head">
-            <div><h1 class="page-title">运营概览</h1><p class="page-desc">查看平台用户、积分余额、积分消耗和流水总览。</p></div>
-          </div>
           <div class="metrics">
             <div class="metric-card"><div class="metric-label">用户总数</div><div class="metric-value">{summary?.user_count || 0}</div><div class="metric-note">启用 {summary?.active_user_count || 0} 人</div></div>
             <div class="metric-card"><div class="metric-label">平台积分余额</div><div class="metric-value">{summary?.total_balance || 0}</div><div class="metric-note">所有用户余额合计</div></div>
@@ -131,12 +141,10 @@
         {/if}
 
         {#if activeTab === 'users'}
-          <div class="page-head"><div><h1 class="page-title">用户管理</h1><p class="page-desc">管理用户状态、查看积分余额。这里不进入任何用户的内容生产工作区。</p></div></div>
           <div class="panel"><div class="panel-head"><div><div class="panel-title">用户列表</div><div class="panel-subtitle">共 {users.length} 个账号</div></div></div><div class="panel-body table-wrap"><table class="table"><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>{#each users as user}<tr><td><div class="main-text">{user.display_name}</div><div class="sub-text">@{user.username}</div></td><td><span class="status blue">{user.role === 'admin' ? '管理员' : '普通用户'}</span></td><td><span class={'status ' + (user.status === 'active' ? 'green' : 'red')}>{user.status === 'active' ? '启用' : '禁用'}</span></td><td>{user.points}</td><td>{user.created_at}</td><td>{user.last_login || '-'}</td><td><button class="btn btn-text" on:click={() => toggleUser(user)}>{user.status === 'active' ? '禁用' : '启用'}</button></td></tr>{/each}</tbody></table></div></div>
         {/if}
 
         {#if activeTab === 'points'}
-          <div class="page-head"><div><h1 class="page-title">积分调整</h1><p class="page-desc">为用户手动发放或扣减积分，并生成可追溯的积分流水。</p></div></div>
           <div class="admin-layout">
             <div class="panel"><div class="panel-head"><div><div class="panel-title">调整积分</div><div class="panel-subtitle">正数为充值，负数为扣减。</div></div></div><div class="panel-body"><div class="field"><label>选择用户</label><select bind:value={selectedUserId}>{#each users as user}<option value={user.id}>{user.display_name} / @{user.username} / {user.points}积分</option>{/each}</select></div><div class="field"><label>调整积分</label><input type="number" bind:value={amount} /></div><div class="field"><label>操作原因</label><input bind:value={reason} /></div><button class="btn btn-primary" style="width:100%;" on:click={adjustPoints}>提交调整</button></div></div>
             <div class="panel"><div class="panel-head"><div><div class="panel-title">积分规则</div><div class="panel-subtitle">MVP 固定规则，后续可做平台配置。</div></div></div><div class="panel-body rule-grid"><div class="rule-card"><b>注册赠送</b><span>1000 积分</span></div><div class="rule-card"><b>生成分镜</b><span>10 积分 / 次</span></div><div class="rule-card"><b>生成视频</b><span>10 积分 / 秒</span></div><div class="rule-card"><b>合成成片</b><span>30 积分 / 次</span></div></div></div>
@@ -144,7 +152,6 @@
         {/if}
 
         {#if activeTab === 'ledger'}
-          <div class="page-head"><div><h1 class="page-title">积分流水</h1><p class="page-desc">查看全平台积分充值、赠送、消耗和后台调整记录。</p></div></div>
           <div class="panel"><div class="panel-head"><div><div class="panel-title">流水记录</div><div class="panel-subtitle">最近 {ledger.length} 条记录</div></div></div><div class="panel-body table-wrap"><table class="table"><thead><tr><th>时间</th><th>用户</th><th>场景</th><th>说明</th><th>类型</th><th>变动</th><th>余额</th></tr></thead><tbody>{#each ledger as row}<tr><td>{row.created_at}</td><td><div class="main-text">{row.display_name}</div><div class="sub-text">@{row.username}</div></td><td>{row.scene}</td><td>{row.description}</td><td>{row.type}</td><td><span class={row.amount >= 0 ? 'amount plus' : 'amount minus'}>{row.amount >= 0 ? '+' : ''}{row.amount}</span></td><td>{row.balance_after}</td></tr>{/each}</tbody></table></div></div>
         {/if}
       {/if}

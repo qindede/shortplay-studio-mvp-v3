@@ -33,6 +33,7 @@
   let videoTasks: VideoTask[] = [];
   let versions: VideoVersion[] = [];
   let assetType = 'all';
+  let projectPickerOpen = false;
 
   let episodeTitle = '';
   let episodeSummary = '';
@@ -154,6 +155,7 @@
 
   async function selectProject(project: Project, goEpisodes = true) {
     currentProject = project;
+    projectPickerOpen = false;
     episodes = await api.episodes(project.id);
     assets = await api.assets(project.id);
     versions = await api.versions(project.id);
@@ -411,14 +413,34 @@
     </div>
 
     <div class="project-switcher">
-      <div class="switcher-label">当前项目</div>
+      <div class="switcher-head">
+        <div class="switcher-label">当前项目</div>
+        <div class="switcher-actions">
+          <button class="switcher-action switcher-action-primary" on:click={createProject}>新增</button>
+        </div>
+      </div>
       <div class="switcher-main">
         <div class="project-cover-mini"></div>
         <div class="switcher-name">
           <b>{currentProject?.short_name || '未选择项目'}</b>
           <span>{episodes.length}集 · {currentProject ? statusLabel(currentProject.status) : '-'}</span>
         </div>
+        <button class="switcher-inline-toggle" aria-label="切换项目" on:click={() => projectPickerOpen = !projectPickerOpen}>
+          <span class:open={projectPickerOpen} class="switcher-chevron">></span>
+        </button>
       </div>
+      {#if projectPickerOpen}
+        <div class="switcher-list">
+          {#each projects as project}
+            <button class:active={currentProject?.id === project.id} class="switcher-option" on:click={() => selectProject(project, false)}>
+              <div class="switcher-option-name">{project.name}</div>
+              <div class="switcher-option-meta">{project.episode_count}集 · {statusLabel(project.status)}</div>
+            </button>
+          {:else}
+            <div class="switcher-empty">暂无项目，先新建一个。</div>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <div class="nav">
@@ -432,11 +454,26 @@
       <button class:active={activePage === 'account'} class="nav-item" on:click={() => setPage('account')}><span class="nav-icon">额</span><span>额度与导出</span></button>
     </div>
 
-    <div class="usage-card">
-      <div class="title">本月额度</div>
-      <div class="usage-row"><span>视频生成</span><strong>{usage ? usage.video_total_seconds - usage.video_used_seconds : 0}s</strong></div>
-      <div class="usage-row"><span>图片生成</span><strong>{usage ? usage.image_total - usage.image_used : 0}张</strong></div>
-      <div class="usage-row"><span>高清导出</span><strong>{usage ? usage.export_total - usage.export_used : 0}条</strong></div>
+    <div class="sidebar-footer">
+      <div class="usage-card usage-card-user">
+        <div class="usage-user-head">
+          <div class="switcher-label">当前登录</div>
+          <button class="btn usage-user-exit" on:click={logout}>退出</button>
+        </div>
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar">{currentUser.display_name.slice(0, 1)}</div>
+          <div class="sidebar-user-copy">
+            <b>{currentUser.display_name}</b>
+            <span>@{currentUser.username}</span>
+          </div>
+          <div class="sidebar-user-points">{pointBalance} 积分</div>
+        </div>
+        <div class="usage-divider"></div>
+        <div class="title">本月额度</div>
+        <div class="usage-row"><span>视频生成</span><strong>{usage ? usage.video_total_seconds - usage.video_used_seconds : 0}s</strong></div>
+        <div class="usage-row"><span>图片生成</span><strong>{usage ? usage.image_total - usage.image_used : 0}张</strong></div>
+        <div class="usage-row"><span>高清导出</span><strong>{usage ? usage.export_total - usage.export_used : 0}条</strong></div>
+      </div>
     </div>
   </aside>
 
@@ -448,13 +485,18 @@
       </div>
       <div class="top-actions">
         <div class="search">搜索项目、剧集、素材</div>
-        <div class="user-pill">
-          <span>{currentUser.display_name}</span>
-          <b>{pointBalance} 积分</b>
-        </div>
-        <button class="btn btn-secondary" on:click={boot}>刷新</button>
-        <button class="btn btn-secondary" on:click={logout}>退出</button>
-        <button class="btn btn-primary" on:click={handleTopAction}>{pageMeta[activePage][2]}</button>
+        {#if activePage === 'script'}
+          <button class="btn btn-secondary" on:click={() => setPage('episodes')}>返回剧集</button>
+        {/if}
+        {#if activePage === 'video'}
+          <button class="btn btn-secondary" on:click={batchGenerateVideos}>批量生成</button>
+        {/if}
+        {#if activePage === 'account'}
+          <button class="btn btn-secondary" on:click={refreshDashboard}>刷新积分</button>
+        {/if}
+        {#if activePage !== 'account'}
+          <button class="btn btn-primary" on:click={handleTopAction}>{pageMeta[activePage][2]}</button>
+        {/if}
       </div>
     </div>
 
@@ -465,14 +507,6 @@
         {#if error}<div class="error">{error}</div>{/if}
 
         {#if activePage === 'projects'}
-          <div class="page-head">
-            <div>
-              <h1 class="page-title">项目中心</h1>
-              <p class="page-desc">以项目为单位组织短剧内容。每个项目下包含剧集、角色、场景、分镜、视频任务和成片版本。</p>
-            </div>
-            <div><button class="btn btn-blue" on:click={createProject}>新建项目</button></div>
-          </div>
-
           <div class="hero-board">
             <div class="hero-card">
               <div class="hero-copy">
@@ -525,11 +559,6 @@
         {/if}
 
         {#if activePage === 'episodes'}
-          <div class="page-head">
-            <div><h1 class="page-title">剧集管理</h1><p class="page-desc">当前项目：{currentProject?.short_name}。剧集与项目绑定，每一集可独立维护剧情、分镜、视频任务和成片版本。</p></div>
-            <div><button class="btn btn-blue" on:click={createEpisode}>新建剧集</button></div>
-          </div>
-
           <div class="episode-board">
             <div class="panel">
               <div class="panel-head"><div><div class="panel-title">剧集目录</div><div class="panel-subtitle">共 {episodes.length} 集</div></div></div>
@@ -562,11 +591,6 @@
         {/if}
 
         {#if activePage === 'script'}
-          <div class="page-head">
-            <div><h1 class="page-title">剧情与分镜</h1><p class="page-desc">当前剧集：第{String(selectedEpisode?.no || 0).padStart(2, '0')}集《{selectedEpisode?.title || '-'}》。维护本集剧情，并逐镜头生成视频。</p></div>
-            <div><button class="btn btn-secondary" on:click={() => setPage('episodes')}>返回剧集</button><button class="btn btn-blue" on:click={saveAndGenerateStoryboard}>保存并生成</button></div>
-          </div>
-
           {#if selectedEpisode}
             <div class="workspace-layout">
               <div>
@@ -621,7 +645,6 @@
         {/if}
 
         {#if activePage === 'assets'}
-          <div class="page-head"><div><h1 class="page-title">素材库</h1><p class="page-desc">素材绑定到当前项目，可被项目下所有剧集复用，用于保持角色、场景和视觉风格一致。</p></div><div><button class="btn btn-blue" on:click={createAsset}>新建素材</button></div></div>
           <div class="panel">
             <div class="panel-head"><div><div class="panel-title">项目素材</div><div class="panel-subtitle">当前项目：{currentProject?.short_name}</div></div><div class="segment"><button class:active={assetType==='all'} on:click={() => assetType='all'}>全部</button><button class:active={assetType==='character'} on:click={() => assetType='character'}>角色</button><button class:active={assetType==='scene'} on:click={() => assetType='scene'}>场景</button><button class:active={assetType==='image'} on:click={() => assetType='image'}>图片</button><button class:active={assetType==='audio'} on:click={() => assetType='audio'}>音频</button></div></div>
             <div class="panel-body"><div class="asset-grid">
@@ -637,7 +660,6 @@
         {/if}
 
         {#if activePage === 'video'}
-          <div class="page-head"><div><h1 class="page-title">视频中心</h1><p class="page-desc">按项目和剧集查看视频任务、镜头片段和成片版本。</p></div><div><button class="btn btn-secondary" on:click={batchGenerateVideos}>批量生成</button><button class="btn btn-blue" on:click={composeVideo}>合成视频</button></div></div>
           <div class="video-layout">
             <div>
               <div class="panel"><div class="panel-head"><div><div class="panel-title">第{String(selectedEpisode?.no || 0).padStart(2, '0')}集视频任务</div><div class="panel-subtitle">分镜视频片段生成状态。</div></div></div>
@@ -661,11 +683,6 @@
         {/if}
 
         {#if activePage === 'account'}
-          <div class="page-head">
-            <div><h1 class="page-title">额度与导出</h1><p class="page-desc">查看当前账号积分、团队生成额度、高清导出额度和最近积分明细。</p></div>
-            <div><button class="btn btn-secondary" on:click={refreshDashboard}>刷新积分</button></div>
-          </div>
-
           <div class="metrics">
             <div class="metric-card point-metric"><div class="metric-label">当前积分</div><div class="metric-value">{pointBalance}</div><div class="metric-note">账号：{currentUser.display_name}</div></div>
             <div class="metric-card"><div class="metric-label">视频生成额度</div><div class="metric-value">{usage ? usage.video_total_seconds - usage.video_used_seconds : 0}s</div><div class="metric-note">已用 {usage?.video_used_seconds || 0}s / {videoUsedPercent}%</div></div>
