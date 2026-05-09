@@ -11,10 +11,9 @@
   <div class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">制作清单</div>
+        <div class="panel-title">剧集目录</div>
         <div class="panel-subtitle">共 {episodes.length} 集。选择一集进入脚本分镜。</div>
       </div>
-      <button class="btn btn-secondary" on:click={createEpisode}>新增剧集</button>
     </div>
 
     <div class="panel-body table-wrap">
@@ -29,7 +28,7 @@
               <td>{episode.version_count} 个</td>
               <td>{episode.duration_target}s</td>
               <td><span class={'status ' + getStatusClass(episode.status)}>{getStatusLabel(episode.status)}</span></td>
-              <td><button class="btn btn-text" on:click={() => selectEpisode(episode, true)}>进入分镜</button></td>
+              <td><button class="btn btn-text" on:click={() => selectEpisode(episode, true)}>剧集编辑</button></td>
             </tr>
           {:else}
             <tr>
