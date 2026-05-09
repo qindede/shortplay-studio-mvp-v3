@@ -438,7 +438,7 @@
           {/if}
 
           {#if activePage === 'episodes'}
-            <EpisodesPage {episodes} {selectedEpisode} {selectEpisode} {createEpisode} />
+            <EpisodesPage {episodes} {selectEpisode} {createEpisode} />
           {/if}
 
           {#if activePage === 'script'}

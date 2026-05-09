@@ -10,7 +10,6 @@
   const mobileNav: Array<{ key: PageKey; label: string }> = [
     { key: 'projects', label: '宇宙' },
     { key: 'episodes', label: '剧集' },
-    { key: 'script', label: '分镜' },
     { key: 'assets', label: '素材' },
     { key: 'video', label: '成片' },
     { key: 'account', label: '账户' }

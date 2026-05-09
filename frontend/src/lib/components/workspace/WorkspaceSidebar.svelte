@@ -18,10 +18,9 @@
   const navItems: Array<{ key: PageKey; label: string; icon: string }> = [
     { key: 'projects', label: '项目中心', icon: '01' },
     { key: 'episodes', label: '剧集编排', icon: '02' },
-    { key: 'script', label: '脚本分镜', icon: '03' },
-    { key: 'assets', label: '资产中心', icon: '04' },
-    { key: 'video', label: '视频中心', icon: '05' },
-    { key: 'account', label: '额度账户', icon: '06' }
+    { key: 'assets', label: '资产中心', icon: '03' },
+    { key: 'video', label: '视频中心', icon: '04' },
+    { key: 'account', label: '额度账户', icon: '05' }
   ];
 </script>
 
@@ -70,7 +69,7 @@
 
   <div class="nav">
     <div class="nav-section">制作动线</div>
-    {#each navItems.slice(0, 5) as item}
+    {#each navItems.slice(0, 4) as item}
       <button class:active={activePage === item.key} class="nav-item" on:click={() => setPage(item.key)}>
         <span class="nav-icon">{item.icon}</span>
         <span>{item.label}</span>
@@ -79,7 +78,7 @@
 
     <div class="nav-section">账户</div>
     <button class:active={activePage === 'account'} class="nav-item" on:click={() => setPage('account')}>
-      <span class="nav-icon">06</span>
+      <span class="nav-icon">05</span>
       <span>额度账户</span>
     </button>
   </div>

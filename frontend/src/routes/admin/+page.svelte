@@ -104,7 +104,7 @@
             <b>{currentUser?.display_name || '管理员'}</b>
             <span>@{currentUser?.username || 'admin'}</span>
           </div>
-          <div class="sidebar-user-points" on:click={logout}}>退出</div>
+          <button class="sidebar-user-points" on:click={logout}>退出</button>
         </div>
       </div>
 
