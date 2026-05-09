@@ -38,7 +38,7 @@
     <div class="switcher-head">
       <div>
         <div class="switcher-label">当前项目</div>
-        <div class="switcher-caption">选择一个故事世界继续创作</div>
+        <div class="switcher-caption">选择一个项目继续创作</div>
       </div>
       <button class="switcher-action switcher-action-primary" on:click={createProject}>+</button>
     </div>
