@@ -11,7 +11,7 @@ interface PageMeta {
 
 export const pageMeta: Record<PageKey, PageMeta> = {
   projects: {
-    title: '创作宇宙',
+    title: '项目中心',
     description: '从项目、剧集、素材到成片，掌控整条短剧生产线',
     actionLabel: '新建项目'
   },

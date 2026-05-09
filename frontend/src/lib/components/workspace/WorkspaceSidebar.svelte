@@ -16,7 +16,7 @@
   export let logout: () => void;
 
   const navItems: Array<{ key: PageKey; label: string; icon: string }> = [
-    { key: 'projects', label: '创作宇宙', icon: '01' },
+    { key: 'projects', label: '项目中心', icon: '01' },
     { key: 'episodes', label: '剧集编排', icon: '02' },
     { key: 'script', label: '脚本分镜', icon: '03' },
     { key: 'assets', label: '角色场景', icon: '04' },
