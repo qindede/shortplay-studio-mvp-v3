@@ -102,22 +102,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   margin-top: 3px;
 }
 
-.studio-signal {
-  height: 32px;
-  display: grid;
-  grid-template-columns: 1fr .64fr 1.3fr .5fr;
-  gap: 6px;
-  padding: 0 8px;
-}
-.studio-signal span {
-  display: block;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.studio-signal span:nth-child(1) { background: rgba(216, 255, 107, 0.55); }
-.studio-signal span:nth-child(3) { background: rgba(85, 214, 194, 0.38); }
-
 .project-switcher,
 .usage-card,
 .sidebar-user-card,

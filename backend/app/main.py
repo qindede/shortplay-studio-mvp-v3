@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from .store import now, snapshot, uid, update
 
-app = FastAPI(title="ShortPlay Studio MVP API", version="0.2.0")
+app = FastAPI(title="剧灵 API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -215,7 +215,7 @@ def usage_with_members(data: dict) -> dict:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "name": "ShortPlay Studio MVP"}
+    return {"ok": True, "name": "剧灵"}
 
 
 @app.post("/api/auth/register")

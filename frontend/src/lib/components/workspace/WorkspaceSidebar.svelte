@@ -29,13 +29,9 @@
   <div class="brand">
     <div class="brand-mark">SP</div>
     <div>
-      <div class="brand-title">ShortPlay Studio</div>
+      <div class="brand-title">剧灵</div>
       <div class="brand-subtitle">短剧内容创作舱</div>
     </div>
-  </div>
-
-  <div class="studio-signal">
-    <span></span><span></span><span></span><span></span>
   </div>
 
   <div class="project-switcher">
