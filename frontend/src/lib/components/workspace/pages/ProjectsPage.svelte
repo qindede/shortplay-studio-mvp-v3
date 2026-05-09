@@ -19,7 +19,7 @@
       <p>{currentProject?.description || '创建项目后，可以在这里组织剧集、角色、场景、分镜和成片版本。'}</p>
       <div class="hero-actions">
         <button class="btn btn-primary" on:click={() => setPage('episodes')}>进入剧集编排</button>
-        <button class="btn btn-secondary" on:click={() => setPage('assets')}>查看角色场景</button>
+        <button class="btn btn-secondary" on:click={() => setPage('assets')}>查看资产中心</button>
       </div>
     </div>
     <div class="poster-stack">

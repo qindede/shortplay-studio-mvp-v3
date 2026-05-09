@@ -19,8 +19,8 @@
     { key: 'projects', label: '项目中心', icon: '01' },
     { key: 'episodes', label: '剧集编排', icon: '02' },
     { key: 'script', label: '脚本分镜', icon: '03' },
-    { key: 'assets', label: '角色场景', icon: '04' },
-    { key: 'video', label: '成片控制', icon: '05' },
+    { key: 'assets', label: '资产中心', icon: '04' },
+    { key: 'video', label: '视频中心', icon: '05' },
     { key: 'account', label: '额度账户', icon: '06' }
   ];
 </script>

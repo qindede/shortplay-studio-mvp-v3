@@ -31,7 +31,7 @@ export const pageMeta: Record<PageKey, PageMeta> = {
     actionLabel: '新建素材'
   },
   video: {
-    title: '成片控制台',
+    title: '视频中心台',
     description: '查看片段生成、版本合成和竖屏导出状态',
     actionLabel: '合成视频'
   },
