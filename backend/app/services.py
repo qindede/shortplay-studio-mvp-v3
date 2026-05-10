@@ -46,6 +46,32 @@ def change_points(data: dict, user_id: str, amount: int, kind: str, scene: str, 
     return entry
 
 
+def get_user_projects(data: dict, user_id: str) -> list[dict]:
+    return [p for p in data["projects"] if p.get("owner_user_id") == user_id]
+
+
+def verify_project_ownership(data: dict, project_id: str, user_id: str) -> dict:
+    project = next((p for p in data["projects"] if p["id"] == project_id), None)
+    if not project:
+        not_found("project")
+    if project.get("owner_user_id") != user_id:
+        raise HTTPException(status_code=403, detail="无权访问此项目")
+    return project
+
+
+def get_user_usage(data: dict, user_id: str) -> dict:
+    user = user_in_data(data, user_id)
+    user.setdefault("usage", {})
+    usage = user["usage"]
+    usage.setdefault("video_total_seconds", 2000)
+    usage.setdefault("video_used_seconds", 0)
+    usage.setdefault("image_total", 1000)
+    usage.setdefault("image_used", 0)
+    usage.setdefault("export_total", 164)
+    usage.setdefault("export_used", 0)
+    return usage
+
+
 def enrich_project(data: dict, project: dict) -> dict:
     project_id = project["id"]
     episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
@@ -72,8 +98,11 @@ def enrich_episode(data: dict, episode: dict) -> dict:
     }
 
 
-def usage_with_members(data: dict) -> dict:
-    usage = {**data.get("usage", {})}
+def usage_with_members(data: dict, user_id: str | None = None) -> dict:
+    if user_id:
+        usage = {**get_user_usage(data, user_id)}
+    else:
+        usage = {**data.get("usage", {})}
     usage["team_members"] = len([u for u in data.get("users", []) if u.get("status") == "active"])
     return usage
 
@@ -184,7 +213,7 @@ def create_or_complete_video_task(data: dict, shot: dict) -> dict:
 def consume_for_video(data: dict, user_id: str, shots: list[dict], scene: str, description: str) -> int:
     total_duration = sum(max(1, int(s["duration"])) for s in shots)
     change_points(data, user_id, -(total_duration * POINT_RULES["video_second"]), "consume", scene, description)
-    usage = data["usage"]
+    usage = get_user_usage(data, user_id)
     usage["video_used_seconds"] = min(usage["video_total_seconds"], usage["video_used_seconds"] + total_duration)
     return total_duration
 

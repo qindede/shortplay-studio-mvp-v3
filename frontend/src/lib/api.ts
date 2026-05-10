@@ -117,6 +117,7 @@ export interface Project {
   status: Status;
   status_label: string;
   owner: string;
+  owner_user_id: string;
   cover: string;
   updated_at: string;
   episode_count: number;

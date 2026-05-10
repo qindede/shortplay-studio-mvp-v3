@@ -21,6 +21,14 @@ def default_password_hash(password: str) -> str:
 
 def default_users() -> list[dict[str, Any]]:
     ts = now()
+    default_usage = {
+        "video_total_seconds": 2000,
+        "video_used_seconds": 0,
+        "image_total": 1000,
+        "image_used": 0,
+        "export_total": 164,
+        "export_used": 0,
+    }
     return [
         {
             "id": "user_admin",
@@ -31,6 +39,7 @@ def default_users() -> list[dict[str, Any]]:
             "status": "active",
             "points": 100000,
             "token": "",
+            "usage": {**default_usage},
             "created_at": ts,
             "last_login": "",
         },
@@ -43,6 +52,7 @@ def default_users() -> list[dict[str, Any]]:
             "status": "active",
             "points": 2000,
             "token": "",
+            "usage": {**default_usage},
             "created_at": ts,
             "last_login": "",
         },
@@ -167,7 +177,8 @@ def seed_data() -> dict[str, Any]:
                 "short_name": "豪门错爱",
                 "description": "女主误闯订婚现场，男主当众宣布她才是真正的未婚妻。",
                 "status": "active",
-                "owner": "林晓",
+                "owner": "演示用户",
+                "owner_user_id": "user_demo",
                 "cover": "dark",
                 "updated_at": now(),
             },
@@ -177,7 +188,8 @@ def seed_data() -> dict[str, Any]:
                 "short_name": "真假千金",
                 "description": "医院门口身份揭露，亲生母亲当场崩溃。",
                 "status": "review",
-                "owner": "陈青",
+                "owner": "演示用户",
+                "owner_user_id": "user_demo",
                 "cover": "blue",
                 "updated_at": now(),
             },
@@ -187,7 +199,8 @@ def seed_data() -> dict[str, Any]:
                 "short_name": "赘婿逆袭",
                 "description": "男主被羞辱后亮出集团继承人身份。",
                 "status": "draft",
-                "owner": "王宁",
+                "owner": "管理员",
+                "owner_user_id": "user_admin",
                 "cover": "green",
                 "updated_at": now(),
             },
@@ -197,7 +210,8 @@ def seed_data() -> dict[str, Any]:
                 "short_name": "重生复仇",
                 "description": "女主重生回到入职第一天，提前识破同事陷害。",
                 "status": "active",
-                "owner": "李可",
+                "owner": "管理员",
+                "owner_user_id": "user_admin",
                 "cover": "purple",
                 "updated_at": now(),
             },
@@ -345,6 +359,11 @@ def seed_data() -> dict[str, Any]:
 
 def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
     changed = False
+    # Migrate projects without owner_user_id - assign to admin
+    for project in data.get("projects", []):
+        if "owner_user_id" not in project:
+            project["owner_user_id"] = "user_admin"
+            changed = True
     if "users" not in data:
         data["users"] = default_users()
         changed = True
@@ -357,6 +376,13 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
             user.setdefault("token", "")
             user.setdefault("created_at", now())
             user.setdefault("last_login", "")
+            user.setdefault("usage", {})
+            user["usage"].setdefault("video_total_seconds", 2000)
+            user["usage"].setdefault("video_used_seconds", 0)
+            user["usage"].setdefault("image_total", 1000)
+            user["usage"].setdefault("image_used", 0)
+            user["usage"].setdefault("export_total", 164)
+            user["usage"].setdefault("export_used", 0)
     if "point_ledger" not in data:
         data["point_ledger"] = []
         for user in data["users"]:

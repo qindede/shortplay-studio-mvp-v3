@@ -24,11 +24,14 @@ from ..services import (
     enrich_episode,
     enrich_project,
     find_by_id,
+    get_user_projects,
+    get_user_usage,
     not_found,
     renumber,
     touch_episode_and_project,
     touch_project,
     usage_with_members,
+    verify_project_ownership,
 )
 from ..store import now, snapshot, uid, update
 
@@ -38,12 +41,14 @@ router = APIRouter(prefix="/api", tags=["content"])
 @router.get("/dashboard")
 def dashboard(user: dict = Depends(get_current_user)):
     data = snapshot()
+    user_projects = get_user_projects(data, user["id"])
+    project_ids = {p["id"] for p in user_projects}
     return {
-        "project_count": len(data["projects"]),
-        "episode_count": len(data["episodes"]),
-        "version_count": len(data["video_versions"]),
-        "asset_count": len(data["assets"]),
-        "usage": usage_with_members(data),
+        "project_count": len(user_projects),
+        "episode_count": len([e for e in data["episodes"] if e["project_id"] in project_ids]),
+        "version_count": len([v for v in data["video_versions"] if v["project_id"] in project_ids]),
+        "asset_count": len([a for a in data["assets"] if a["project_id"] in project_ids]),
+        "usage": usage_with_members(data, user["id"]),
         "current_user": user,
     }
 
@@ -51,7 +56,8 @@ def dashboard(user: dict = Depends(get_current_user)):
 @router.get("/projects")
 def list_projects(user: dict = Depends(get_current_user)):
     data = snapshot()
-    return [enrich_project(data, p) for p in data["projects"]]
+    user_projects = get_user_projects(data, user["id"])
+    return [enrich_project(data, p) for p in user_projects]
 
 
 @router.post("/projects")
@@ -103,13 +109,13 @@ def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depen
 @router.get("/projects/{project_id}")
 def get_project(project_id: str, user: dict = Depends(get_current_user)):
     data = snapshot()
-    return enrich_project(data, find_by_id(data["projects"], project_id, "project"))
+    return enrich_project(data, verify_project_ownership(data, project_id, user["id"]))
 
 
 @router.get("/projects/{project_id}/episodes")
 def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
     data = snapshot()
-    find_by_id(data["projects"], project_id, "project")
+    verify_project_ownership(data, project_id, user["id"])
     episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
     episodes.sort(key=lambda x: x["no"])
     return [enrich_episode(data, e) for e in episodes]
@@ -118,7 +124,7 @@ def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
 @router.post("/projects/{project_id}/episodes")
 def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends(get_current_user)):
     def mutate(data):
-        find_by_id(data["projects"], project_id, "project")
+        verify_project_ownership(data, project_id, user["id"])
         project_episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
         ts = now()
         episode = {
@@ -142,13 +148,16 @@ def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends
 @router.get("/episodes/{episode_id}")
 def get_episode(episode_id: str, user: dict = Depends(get_current_user)):
     data = snapshot()
-    return enrich_episode(data, find_by_id(data["episodes"], episode_id, "episode"))
+    episode = find_by_id(data["episodes"], episode_id, "episode")
+    verify_project_ownership(data, episode["project_id"], user["id"])
+    return enrich_episode(data, episode)
 
 
 @router.put("/episodes/{episode_id}")
 def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends(get_current_user)):
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, episode["project_id"], user["id"])
         for key, value in payload.model_dump(exclude_none=True).items():
             episode[key] = value
         touch_episode_and_project(data, episode)
@@ -161,6 +170,7 @@ def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends
 def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, episode["project_id"], user["id"])
         project_id = episode["project_id"]
         data["episodes"] = [e for e in data["episodes"] if e["id"] != episode_id]
         data["shots"] = [s for s in data["shots"] if s["episode_id"] != episode_id]
@@ -176,7 +186,8 @@ def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
 @router.get("/episodes/{episode_id}/shots")
 def list_shots(episode_id: str, user: dict = Depends(get_current_user)):
     data = snapshot()
-    find_by_id(data["episodes"], episode_id, "episode")
+    episode = find_by_id(data["episodes"], episode_id, "episode")
+    verify_project_ownership(data, episode["project_id"], user["id"])
     shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
     shots.sort(key=lambda x: x["no"])
     return shots
@@ -186,6 +197,7 @@ def list_shots(episode_id: str, user: dict = Depends(get_current_user)):
 def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_current_user)):
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, episode["project_id"], user["id"])
         episode_shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
         ts = now()
         shot = {
@@ -213,6 +225,7 @@ def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_c
 def generate_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, episode["project_id"], user["id"])
         change_points(data, user["id"], -POINT_RULES["storyboard"], "consume", "生成分镜", f"生成/更新《{episode['title']}》分镜")
         data["shots"] = [s for s in data["shots"] if s["episode_id"] != episode_id]
         new_shots = build_storyboard(episode)
@@ -228,6 +241,9 @@ def generate_storyboard(episode_id: str, user: dict = Depends(get_current_user))
 def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_current_user)):
     def mutate(data):
         shot = find_by_id(data["shots"], shot_id, "shot")
+        episode_for_shot = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
+        if episode_for_shot:
+            verify_project_ownership(data, episode_for_shot["project_id"], user["id"])
         updates = payload.model_dump(exclude_none=True)
         shot.update(updates)
         shot["updated_at"] = now()
@@ -253,11 +269,12 @@ def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
     def mutate(data):
         shot = find_by_id(data["shots"], shot_id, "shot")
         episode_id = shot["episode_id"]
+        episode = next((e for e in data["episodes"] if e["id"] == episode_id), None)
+        if episode:
+            verify_project_ownership(data, episode["project_id"], user["id"])
         data["shots"] = [s for s in data["shots"] if s["id"] != shot_id]
         data["video_tasks"] = [t for t in data["video_tasks"] if t["shot_id"] != shot_id]
         renumber([s for s in data["shots"] if s["episode_id"] == episode_id])
-
-        episode = next((e for e in data["episodes"] if e["id"] == episode_id), None)
         if episode:
             touch_episode_and_project(data, episode)
         return {"ok": True}
@@ -268,7 +285,8 @@ def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
 @router.get("/episodes/{episode_id}/video-tasks")
 def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
     data = snapshot()
-    find_by_id(data["episodes"], episode_id, "episode")
+    episode = find_by_id(data["episodes"], episode_id, "episode")
+    verify_project_ownership(data, episode["project_id"], user["id"])
     tasks = [t for t in data["video_tasks"] if t["episode_id"] == episode_id]
     tasks.sort(key=lambda x: x["updated_at"], reverse=True)
     return tasks
@@ -278,6 +296,9 @@ def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
 def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)):
     def mutate(data):
         shot = find_by_id(data["shots"], shot_id, "shot")
+        episode_for_shot = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
+        if episode_for_shot:
+            verify_project_ownership(data, episode_for_shot["project_id"], user["id"])
         consume_for_video(
             data,
             user["id"],
@@ -298,6 +319,7 @@ def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)
 def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user)):
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, episode["project_id"], user["id"])
         shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
         if not shots:
             not_found("shots")
@@ -321,7 +343,7 @@ def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user))
 @router.get("/projects/{project_id}/assets")
 def list_assets(project_id: str, type: str | None = None, user: dict = Depends(get_current_user)):
     data = snapshot()
-    find_by_id(data["projects"], project_id, "project")
+    verify_project_ownership(data, project_id, user["id"])
     assets = [a for a in data["assets"] if a["project_id"] == project_id]
     if type:
         assets = [a for a in assets if a["type"] == type]
@@ -331,7 +353,7 @@ def list_assets(project_id: str, type: str | None = None, user: dict = Depends(g
 @router.post("/projects/{project_id}/assets")
 def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get_current_user)):
     def mutate(data):
-        find_by_id(data["projects"], project_id, "project")
+        verify_project_ownership(data, project_id, user["id"])
         visual_asset = payload.type in {"character", "scene", "image"}
         cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
         scene = "创建视觉素材" if visual_asset else "创建音频素材"
@@ -350,7 +372,8 @@ def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get
         }
         data["assets"].insert(0, asset)
         if visual_asset:
-            data["usage"]["image_used"] = min(data["usage"]["image_total"], data["usage"]["image_used"] + 1)
+            user_usage = get_user_usage(data, user["id"])
+            user_usage["image_used"] = min(user_usage["image_total"], user_usage["image_used"] + 1)
         touch_project(data, project_id, ts)
         return asset
 
@@ -360,7 +383,7 @@ def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get
 @router.get("/projects/{project_id}/video-versions")
 def list_video_versions(project_id: str, episode_id: str | None = None, user: dict = Depends(get_current_user)):
     data = snapshot()
-    find_by_id(data["projects"], project_id, "project")
+    verify_project_ownership(data, project_id, user["id"])
     versions = [v for v in data["video_versions"] if v["project_id"] == project_id]
     if episode_id:
         versions = [v for v in versions if v["episode_id"] == episode_id]
@@ -372,6 +395,7 @@ def list_video_versions(project_id: str, episode_id: str | None = None, user: di
 def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depends(get_current_user)):
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, episode["project_id"], user["id"])
         change_points(data, user["id"], -POINT_RULES["compose"], "consume", "合成成片", f"合成《{episode['title']}》成片版本")
         version_no = len([v for v in data["video_versions"] if v["episode_id"] == episode_id]) + 1
         version = {
@@ -387,7 +411,8 @@ def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depen
             "created_at": now(),
         }
         data["video_versions"].insert(0, version)
-        data["usage"]["export_used"] = min(data["usage"]["export_total"], data["usage"]["export_used"] + 1)
+        user_usage = get_user_usage(data, user["id"])
+        user_usage["export_used"] = min(user_usage["export_total"], user_usage["export_used"] + 1)
         touch_episode_and_project(data, episode)
         return version
 
@@ -397,7 +422,7 @@ def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depen
 @router.get("/usage")
 def usage(user: dict = Depends(get_current_user)):
     data = snapshot()
-    return usage_with_members(data)
+    return usage_with_members(data, user["id"])
 
 
 @router.get("/point-rules")
