@@ -160,6 +160,8 @@ export interface Shot {
   updated_at: string;
 }
 
+export type ShotUpdate = Partial<Pick<Shot, 'title' | 'visual' | 'dialogue' | 'characters' | 'scene' | 'duration' | 'status'>>;
+
 export interface Asset {
   id: string;
   project_id: string;
@@ -217,6 +219,10 @@ export const api = {
   deleteEpisode: (episodeId: string) =>
     request<{ ok: boolean }>(`/api/episodes/${episodeId}`, { method: 'DELETE' }),
   shots: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/shots`),
+  updateShot: (shotId: string, body: ShotUpdate) =>
+    request<Shot>(`/api/shots/${shotId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteShot: (shotId: string) =>
+    request<{ ok: boolean }>(`/api/shots/${shotId}`, { method: 'DELETE' }),
   generateStoryboard: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/generate-storyboard`, { method: 'POST' }),
   generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
   videoTasks: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/video-tasks`),

@@ -534,10 +534,54 @@ def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_curre
         shot = next((s for s in data["shots"] if s["id"] == shot_id), None)
         if not shot:
             not_found("shot")
-        for key, value in payload.model_dump(exclude_none=True).items():
+        updates = payload.model_dump(exclude_none=True)
+        for key, value in updates.items():
             shot[key] = value
         shot["updated_at"] = now()
+
+        task = next((t for t in data["video_tasks"] if t["shot_id"] == shot_id), None)
+        if task:
+            if "title" in updates:
+                task["title"] = shot["title"]
+            if "duration" in updates:
+                task["duration"] = shot["duration"]
+            task["updated_at"] = now()
+
+        episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
+        if episode:
+            episode["updated_at"] = now()
+            project = next((p for p in data["projects"] if p["id"] == episode["project_id"]), None)
+            if project:
+                project["updated_at"] = episode["updated_at"]
         return shot
+
+    return update(mutate)
+
+
+@app.delete("/api/shots/{shot_id}")
+def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        shot = next((s for s in data["shots"] if s["id"] == shot_id), None)
+        if not shot:
+            not_found("shot")
+
+        episode_id = shot["episode_id"]
+        data["shots"] = [s for s in data["shots"] if s["id"] != shot_id]
+        data["video_tasks"] = [t for t in data["video_tasks"] if t["shot_id"] != shot_id]
+
+        episode_shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
+        episode_shots.sort(key=lambda item: item["no"])
+        for index, item in enumerate(episode_shots, start=1):
+            item["no"] = index
+
+        episode = next((e for e in data["episodes"] if e["id"] == episode_id), None)
+        if episode:
+            episode["updated_at"] = now()
+            project = next((p for p in data["projects"] if p["id"] == episode["project_id"]), None)
+            if project:
+                project["updated_at"] = episode["updated_at"]
+
+        return {"ok": True}
 
     return update(mutate)
 

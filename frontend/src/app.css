@@ -998,6 +998,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 16px;
 }
+.script-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  align-items: start;
+}
+.script-left-column,
+.script-right-column {
+  min-width: 0;
+}
+.shot-table-panel {
+  margin-bottom: 0;
+}
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1033,6 +1044,9 @@ textarea {
 }
 .script-editor textarea {
   min-height: 280px;
+}
+.compact-textarea {
+  min-height: 96px;
 }
 .tag-list {
   display: flex;
