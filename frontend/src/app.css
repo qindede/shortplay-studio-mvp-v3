@@ -1363,7 +1363,7 @@ textarea {
   place-items: center;
   padding: 22px;
   background: rgba(3, 4, 7, 0.72);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(8px);
 }
 .modal-panel {
   width: min(720px, 100%);

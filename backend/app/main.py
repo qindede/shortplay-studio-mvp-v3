@@ -364,7 +364,7 @@ def build_project_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]
     episodes: list[EpisodeDraft] = []
     for index in range(payload.episode_count):
         beat_title, beat_summary = beats[index % len(beats)]
-        title = f"第{index + 1:02d}集 {beat_title}"
+        title = beat_title
         summary = f"{description} 本集聚焦“{beat_title}”：{beat_summary}"
         script = (
             f"项目《{name}》第{index + 1}集。"
