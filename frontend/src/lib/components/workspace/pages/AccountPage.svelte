@@ -38,7 +38,7 @@
 </div>
 
 <div class="account-layout">
-  <div class="panel">
+  <div class="panel" style="align-self: start">
     <div class="panel-head">
       <div>
         <div class="panel-title">积分规则</div>
