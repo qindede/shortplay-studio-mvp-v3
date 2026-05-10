@@ -1557,6 +1557,31 @@ textarea {
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 16px;
 }
+.password-panel {
+  min-height: 0;
+}
+.password-form {
+  width: min(520px, 100%);
+  margin: 18px auto 6px;
+}
+.password-field {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+.password-field label {
+  margin-bottom: 0;
+  text-align: right;
+}
+.password-actions {
+  justify-content: center;
+  border-top: 0;
+  padding: 6px 0 0;
+}
+.password-actions .btn {
+  min-width: 160px;
+}
 .rule-grid {
   display: grid;
   gap: 10px;
@@ -1750,6 +1775,16 @@ textarea {
   .project-grid,
   .video-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .password-field {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+  .password-field label {
+    text-align: left;
+  }
+  .password-actions {
+    padding-left: 0;
   }
 }
 

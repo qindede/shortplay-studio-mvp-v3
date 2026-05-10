@@ -280,7 +280,7 @@
                 <div class="field"><label for="admin-current-password">当前密码</label><input id="admin-current-password" type="password" bind:value={adminCurrentPassword} autocomplete="current-password" /></div>
                 <div class="field"><label for="admin-new-password">新密码</label><input id="admin-new-password" type="password" bind:value={adminNewPassword} autocomplete="new-password" /></div>
                 <div class="field"><label for="admin-confirm-password">确认新密码</label><input id="admin-confirm-password" type="password" bind:value={adminConfirmPassword} autocomplete="new-password" /></div>
-                <button class="btn btn-primary" style="width:100%;" disabled={adminPasswordSaving} on:click={changeAdminPassword}>{adminPasswordSaving ? '正在保存...' : '更新密码'}</button>
+                <button class="btn btn-primary" style="width:100%;" disabled={adminPasswordSaving} on:click={changeAdminPassword}>{adminPasswordSaving ? '正在保存...' : '修改密码'}</button>
               </div>
             </div>
             <div class="panel">

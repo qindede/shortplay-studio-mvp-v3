@@ -39,33 +39,38 @@
   }
 </script>
 
-<div class="account-layout">
-  <div class="panel">
-    <div class="panel-head">
-      <div>
-        <div class="panel-title">密码安全</div>
-        <div class="panel-subtitle">修改当前登录账号的密码。</div>
-      </div>
+<div class="panel password-panel">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title">密码安全</div>
+      <div class="panel-subtitle">更新当前登录账号的密码。</div>
     </div>
+  </div>
 
-    <div class="panel-body">
+  <div class="panel-body">
+    <form class="password-form" on:submit|preventDefault={changePassword}>
       {#if passwordError}<div class="error">{passwordError}</div>{/if}
       {#if passwordMessage}<div class="success">{passwordMessage}</div>{/if}
-      <div class="field">
+
+      <div class="field password-field">
         <label for="password-current">当前密码</label>
         <input id="password-current" type="password" bind:value={currentPassword} autocomplete="current-password" />
       </div>
-      <div class="field">
+
+      <div class="field password-field">
         <label for="password-new">新密码</label>
         <input id="password-new" type="password" bind:value={newPassword} autocomplete="new-password" />
       </div>
-      <div class="field">
+      <div class="field password-field">
         <label for="password-confirm">确认新密码</label>
         <input id="password-confirm" type="password" bind:value={confirmPassword} autocomplete="new-password" />
       </div>
-      <button class="btn btn-primary" style="width:100%;" disabled={passwordSaving} on:click={changePassword}>
-        {passwordSaving ? '正在保存...' : '更新密码'}
-      </button>
-    </div>
+
+      <div class="panel-actions password-actions">
+        <button class="btn btn-primary" disabled={passwordSaving} type="submit">
+          {passwordSaving ? '正在保存...' : '修改密码'}
+        </button>
+      </div>
+    </form>
   </div>
 </div>

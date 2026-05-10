@@ -42,8 +42,8 @@ export const pageMeta: Record<PageKey, PageMeta> = {
   },
   password: {
     title: '密码安全',
-    description: '更新当前账号的登录密码',
-    actionLabel: '更新密码'
+    description: '修改当前账号的登录密码',
+    actionLabel: '修改密码'
   }
 };
 
