@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Episode, Project, Usage, User } from '$lib/api';
+  import type { Episode, Project, User } from '$lib/api';
   import { getStatusLabel, type PageKey } from '$lib/workspace/ui';
   import Clapperboard from 'lucide-svelte/icons/clapperboard';
   import FolderKanban from 'lucide-svelte/icons/folder-kanban';
@@ -15,7 +15,6 @@
   export let projectPickerOpen = false;
   export let currentUser: User;
   export let pointBalance = 0;
-  export let usage: Usage | null = null;
   export let setPage: (page: PageKey) => void | Promise<void>;
   export let selectProject: (project: Project, goEpisodes?: boolean) => void | Promise<void>;
   export let createProject: () => void | Promise<void>;
@@ -116,12 +115,6 @@
         </div>
         <div class="sidebar-user-points">{pointBalance}</div>
       </div>
-
-      <div class="usage-divider"></div>
-      <div class="title">本月剩余额度</div>
-      <div class="usage-row"><span>视频生成</span><strong>{usage ? usage.video_total_seconds - usage.video_used_seconds : 0}s</strong></div>
-      <div class="usage-row"><span>图片生成</span><strong>{usage ? usage.image_total - usage.image_used : 0} 张</strong></div>
-      <div class="usage-row"><span>高清导出</span><strong>{usage ? usage.export_total - usage.export_used : 0} 条</strong></div>
     </div>
   </div>
 </aside>

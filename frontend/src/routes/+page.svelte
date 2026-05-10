@@ -717,7 +717,6 @@
       bind:projectPickerOpen
       {currentUser}
       {pointBalance}
-      {usage}
       {setPage}
       {selectProject}
       {createProject}
