@@ -577,7 +577,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mobile-tabbar { display: none; }
 
 .content {
-  padding: 26px 28px 46px;
+  padding: 26px 28px;
 }
 
 .hero-board {
@@ -1086,7 +1086,7 @@ textarea {
   line-height: 1.7;
 }
 .script-editor textarea {
-  min-height: 280px;
+  min-height: 200px;
 }
 .script-editor-actions {
   padding-top: 4px;
@@ -1530,6 +1530,12 @@ textarea {
 }
 .project-description-input {
   min-height: 104px;
+}
+.episode-create-modal {
+  width: min(760px, 100%);
+}
+.episode-description-field textarea {
+  min-height: 190px;
 }
 .outline-toolbar {
   border: 1px solid var(--line);

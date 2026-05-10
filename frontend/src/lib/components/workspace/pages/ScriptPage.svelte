@@ -111,7 +111,7 @@
           </div>
           <div class="panel-actions">
             <button class="btn btn-secondary" on:click={openShotCreator}>新增分镜</button>
-            <button class="btn btn-primary" on:click={batchGenerateVideos}>批量生成视频</button>
+            <!-- <button class="btn btn-primary" on:click={batchGenerateVideos}>批量生成视频</button> -->
           </div>
         </div>
 
@@ -164,7 +164,7 @@
           </div>
           <div class="panel-actions script-editor-actions">
             <button class="btn btn-secondary" on:click={saveEpisodeOnly}>保存</button>
-            <button class="btn btn-primary" on:click={saveAndGenerateStoryboard}>智能生成 / 更新分镜（20积分）</button>
+            <button class="btn btn-primary" on:click={saveAndGenerateStoryboard}>智能生成 / 更新分镜（10积分）</button>
           </div>
         </div>
       </div>

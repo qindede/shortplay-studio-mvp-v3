@@ -61,10 +61,18 @@
   let episodeSummary = '';
   let episodeScript = '';
   let episodeDuration = 30;
+  let episodeDialogOpen = false;
+  let episodeSubmitting = false;
+  let episodeFormError = '';
+  let newEpisodeTitle = '';
+  let newEpisodeSummary = '';
+  let newEpisodeScript = '';
+  let newEpisodeDuration = 30;
   let projectDialogOpen = false;
   let projectName = '';
   let projectDescription = '';
   let outlineCost = 20;
+  let storyboardCost = 20;
   let outlineEpisodes: ProjectOutlineEpisode[] = [];
   let outlineLoading = false;
   let projectSubmitting = false;
@@ -83,6 +91,26 @@
     episodeSummary = '';
     episodeScript = '';
     episodeDuration = 30;
+  }
+
+  function resetNewEpisodeForm() {
+    newEpisodeTitle = `第${episodes.length + 1}集`;
+    newEpisodeSummary = '';
+    newEpisodeScript = '';
+    newEpisodeDuration = 30;
+    episodeSubmitting = false;
+    episodeFormError = '';
+  }
+
+  function openEpisodeDialog() {
+    resetNewEpisodeForm();
+    episodeDialogOpen = true;
+  }
+
+  function closeEpisodeDialog() {
+    if (episodeSubmitting) return;
+    episodeDialogOpen = false;
+    resetNewEpisodeForm();
   }
 
   function resetProjectForm() {
@@ -136,7 +164,9 @@
     projectPickerOpen = false;
     activePage = 'projects';
     projectDialogOpen = false;
+    episodeDialogOpen = false;
     resetProjectForm();
+    resetNewEpisodeForm();
     resetEpisodeForm();
   }
 
@@ -389,25 +419,49 @@
   }
 
   async function createEpisode() {
+    openEpisodeDialog();
+  }
+
+  async function submitEpisode(generateStoryboard = false) {
     const project = currentProject;
-    if (!project) return;
+    if (!project || episodeSubmitting) return;
 
-    await safeRun(async () => {
-      const title = prompt('剧集标题', `第${episodes.length + 1}集`);
-      if (!title) return;
+    const title = newEpisodeTitle.trim();
+    const summary = newEpisodeSummary.trim();
+    episodeFormError = '';
+    error = '';
 
-      const summary = prompt('剧情摘要', '请输入本集剧情摘要') || '';
+    if (!title || !summary) {
+      episodeFormError = '请填写剧情标题和剧情摘要。';
+      return;
+    }
+
+    episodeSubmitting = true;
+    try {
       const episode = await api.createEpisode(project.id, {
         title,
         summary,
-        script: summary,
-        duration_target: 30
+        script: newEpisodeScript.trim() || summary,
+        duration_target: Math.max(1, Number(newEpisodeDuration) || 30)
       });
 
       episodes = await api.episodes(project.id);
       await selectEpisode(episode, true);
+
+      if (generateStoryboard) {
+        shots = await api.generateStoryboard(episode.id);
+      }
+
       await refreshDashboard();
-    });
+      await reloadCurrentProject();
+      episodeDialogOpen = false;
+      resetNewEpisodeForm();
+      activePage = 'script';
+    } catch (err) {
+      episodeFormError = err instanceof Error ? err.message : generateStoryboard ? '创建剧情并生成分镜失败' : '创建剧情失败';
+    } finally {
+      episodeSubmitting = false;
+    }
   }
 
   async function deleteEpisode(episode: Episode) {
@@ -655,6 +709,70 @@
       </div>
     </main>
   </div>
+
+  {#if episodeDialogOpen}
+    <div class="modal-backdrop" role="presentation">
+      <div class="modal-panel episode-create-modal" role="dialog" aria-modal="true" aria-labelledby="episode-create-title">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title-accent" id="episode-create-title">新建剧情</div>
+            <div class="panel-subtitle">填写剧情描述，确认后可直接智能生成分镜。</div>
+          </div>
+          <button class="modal-close" aria-label="关闭" on:click={closeEpisodeDialog}>×</button>
+        </div>
+
+        <div class="modal-body">
+          {#if episodeFormError}<div class="error compact-alert">{episodeFormError}</div>{/if}
+
+          <div class="field-grid">
+            <div class="field">
+              <label for="new-episode-title">剧情标题</label>
+              <input id="new-episode-title" bind:value={newEpisodeTitle} placeholder={`第${episodes.length + 1}集`} />
+            </div>
+            <div class="field">
+              <label for="new-episode-duration">目标时长（秒）</label>
+              <input id="new-episode-duration" type="number" min="1" bind:value={newEpisodeDuration} />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="new-episode-summary">剧情摘要</label>
+            <input id="new-episode-summary" bind:value={newEpisodeSummary} placeholder="一句话说明本集冲突、转折和结尾钩子" />
+          </div>
+
+          <div class="field episode-description-field">
+            <label for="new-episode-script">文本描述</label>
+            <textarea
+              id="new-episode-script"
+              bind:value={newEpisodeScript}
+              placeholder="写下本集剧情正文、关键对白、反转节奏或结尾悬念"
+            ></textarea>
+          </div>
+
+          {#if pointBalance < storyboardCost}
+            <div class="inline-hint warn">当前积分 {pointBalance}，不足以生成分镜。</div>
+          {/if}
+        </div>
+
+        <div class="modal-actions modal-actions-split">
+          <button
+            class="btn btn-outline-generate"
+            disabled={episodeSubmitting || pointBalance < storyboardCost}
+            on:click={() => submitEpisode(true)}
+          >
+            {episodeSubmitting ? '处理中...' : `✨ 创建并智能生成分镜（ ${storyboardCost} 积分 ）`}
+          </button>
+
+          <div class="modal-action-right">
+            <button class="btn btn-secondary" disabled={episodeSubmitting} on:click={closeEpisodeDialog}>取消</button>
+            <button class="btn btn-primary" disabled={episodeSubmitting} on:click={() => submitEpisode(false)}>
+              {episodeSubmitting ? '创建中...' : '确认创建剧情'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   {#if projectDialogOpen}
     <div class="modal-backdrop" role="presentation">
