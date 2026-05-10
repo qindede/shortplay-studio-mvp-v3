@@ -183,6 +183,8 @@ export interface VideoTask {
   progress: number;
   status: Status;
   updated_at: string;
+  preview_url?: string;
+  video_url?: string;
 }
 
 export interface VideoVersion {
@@ -196,6 +198,8 @@ export interface VideoVersion {
   status: Status;
   theme: string;
   created_at: string;
+  preview_url?: string;
+  video_url?: string;
 }
 
 export const api = {
