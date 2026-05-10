@@ -30,8 +30,16 @@
   import ScriptPage from '$lib/components/workspace/pages/ScriptPage.svelte';
   import VideoPage from '$lib/components/workspace/pages/VideoPage.svelte';
   import { type AuthMode, type PageKey } from '$lib/workspace/ui';
+  import ConfirmDialog from '$lib/components/workspace/ConfirmDialog.svelte';
 
   type AssetFilter = 'all' | Asset['type'];
+  type DeleteConfirmState = {
+    title: string;
+    message: string;
+    detail?: string;
+    confirmText: string;
+    resolve: (confirmed: boolean) => void;
+  };
 
   let activePage: PageKey = 'projects';
   let loading = true;
@@ -77,6 +85,7 @@
   let outlineLoading = false;
   let projectSubmitting = false;
   let projectFormError = '';
+  let deleteConfirm: DeleteConfirmState | null = null;
 
   const assetTypes: Asset['type'][] = ['character', 'scene', 'image', 'audio'];
 
@@ -165,9 +174,28 @@
     activePage = 'projects';
     projectDialogOpen = false;
     episodeDialogOpen = false;
+    cancelDeleteConfirm();
     resetProjectForm();
     resetNewEpisodeForm();
     resetEpisodeForm();
+  }
+
+  function requestDeleteConfirmation(options: Omit<DeleteConfirmState, 'resolve'>) {
+    return new Promise<boolean>((resolve) => {
+      deleteConfirm = { ...options, resolve };
+    });
+  }
+
+  function cancelDeleteConfirm() {
+    if (!deleteConfirm) return;
+    deleteConfirm.resolve(false);
+    deleteConfirm = null;
+  }
+
+  function confirmDeleteDialog() {
+    if (!deleteConfirm) return;
+    deleteConfirm.resolve(true);
+    deleteConfirm = null;
   }
 
   function buildEpisodePayload() {
@@ -468,9 +496,12 @@
     const project = currentProject;
     if (!project) return;
 
-    const confirmed = confirm(
-      `确定删除第 ${String(episode.no).padStart(2, '0')} 集「${episode.title}」吗？相关分镜、视频任务和成片版本也会一并删除。`
-    );
+    const confirmed = await requestDeleteConfirmation({
+      title: '删除剧集',
+      message: `确定删除第 ${String(episode.no).padStart(2, '0')} 集「${episode.title}」吗？`,
+      detail: '相关分镜、视频任务和成片版本也会一并删除，此操作不可恢复。',
+      confirmText: '确认删除'
+    });
     if (!confirmed) return;
 
     await safeRun(async () => {
@@ -604,7 +635,13 @@
   }
 
   async function deleteShot(shot: Shot) {
-    if (!confirm(`确定删除镜头 #${String(shot.no).padStart(2, '0')}「${shot.title}」吗？相关视频任务也会一并删除。`)) {
+    const confirmed = await requestDeleteConfirmation({
+      title: '删除镜头',
+      message: `确定删除镜头 #${String(shot.no).padStart(2, '0')}「${shot.title}」吗？`,
+      detail: '相关视频任务也会一并删除，此操作不可恢复。',
+      confirmText: '确认删除'
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -741,6 +778,18 @@
       </div>
     </main>
   </div>
+
+  {#if deleteConfirm}
+    <ConfirmDialog
+      title={deleteConfirm.title}
+      message={deleteConfirm.message}
+      detail={deleteConfirm.detail || ''}
+      confirmText={deleteConfirm.confirmText}
+      cancelText="取消"
+      onConfirm={confirmDeleteDialog}
+      onCancel={cancelDeleteConfirm}
+    />
+  {/if}
 
   {#if episodeDialogOpen}
     <div class="modal-backdrop" role="presentation">
