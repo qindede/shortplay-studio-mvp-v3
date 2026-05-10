@@ -4,6 +4,7 @@
   import { api, clearAuthToken, loadAuthToken, setAuthToken, type AdminSummary, type PointLedger, type User } from '$lib/api';
 
   type AdminTab = 'overview' | 'users' | 'points' | 'ledger';
+  const PRIMARY_ADMIN_ID = 'user_admin';
 
   let currentUser: User | null = null;
   let activeTab: AdminTab = 'overview';
@@ -63,12 +64,72 @@
 
   async function toggleUser(user: User) {
     error = '';
+    if (cannotToggleStatus(user)) {
+      error = isPrimaryAdmin(user) ? '不能禁用主管理员账号' : '不能禁用当前登录的管理员账号';
+      return;
+    }
     try {
       await api.adminUpdateUser(user.id, { status: user.status === 'active' ? 'disabled' : 'active' });
       await refreshAdminData();
     } catch (err) {
       error = err instanceof Error ? err.message : '操作失败';
     }
+  }
+
+  async function toggleUserRole(user: User) {
+    error = '';
+    message = '';
+    if (cannotChangeRole(user)) {
+      error = roleChangeBlockedReason(user);
+      return;
+    }
+    const nextRole = user.role === 'admin' ? 'user' : 'admin';
+    try {
+      await api.adminUpdateUser(user.id, { role: nextRole });
+      await refreshAdminData();
+      message = nextRole === 'admin' ? '已添加子管理员' : '已取消子管理员权限';
+    } catch (err) {
+      error = err instanceof Error ? err.message : '操作失败';
+    }
+  }
+
+  function isSelf(user: User) {
+    return currentUser?.id === user.id;
+  }
+
+  function isPrimaryAdmin(user: User) {
+    return user.id === PRIMARY_ADMIN_ID || user.username === 'admin';
+  }
+
+  function cannotToggleStatus(user: User) {
+    return isSelf(user) || isPrimaryAdmin(user);
+  }
+
+  function cannotChangeRole(user: User) {
+    return isSelf(user) || isPrimaryAdmin(user) || (user.role !== 'admin' && !isCurrentUserPrimaryAdmin());
+  }
+
+  function isCurrentUserPrimaryAdmin() {
+    return !!currentUser && isPrimaryAdmin(currentUser);
+  }
+
+  function roleChangeBlockedReason(user: User) {
+    if (isPrimaryAdmin(user)) return '不能修改主管理员角色';
+    if (isSelf(user)) return '不能移除当前登录账号的管理员角色';
+    return '只有主管理员可以添加子管理员';
+  }
+
+  function statusActionLabel(user: User) {
+    if (isPrimaryAdmin(user)) return '主管理员';
+    if (isSelf(user)) return '当前账号';
+    return user.status === 'active' ? '禁用' : '启用';
+  }
+
+  function roleActionLabel(user: User) {
+    if (isPrimaryAdmin(user)) return '主管理员';
+    if (isSelf(user)) return '当前角色';
+    if (user.role !== 'admin' && !isCurrentUserPrimaryAdmin()) return '仅主管理员';
+    return user.role === 'admin' ? '设为用户' : '设为管理员';
   }
 
   function logout() {
@@ -136,7 +197,7 @@
         {/if}
 
         {#if activeTab === 'users'}
-          <div class="panel"><div class="panel-head"><div><div class="panel-title">用户列表</div><div class="panel-subtitle">共 {users.length} 个账号</div></div></div><div class="panel-body table-wrap"><table class="table"><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>{#each users as user}<tr><td><div class="main-text">{user.display_name}</div><div class="sub-text">@{user.username}</div></td><td><span class="status blue">{user.role === 'admin' ? '管理员' : '普通用户'}</span></td><td><span class={'status ' + (user.status === 'active' ? 'green' : 'red')}>{user.status === 'active' ? '启用' : '禁用'}</span></td><td>{user.points}</td><td>{user.created_at}</td><td>{user.last_login || '-'}</td><td><button class="btn btn-text" on:click={() => toggleUser(user)}>{user.status === 'active' ? '禁用' : '启用'}</button></td></tr>{/each}</tbody></table></div></div>
+          <div class="panel"><div class="panel-head"><div><div class="panel-title">用户列表</div><div class="panel-subtitle">共 {users.length} 个账号</div></div></div><div class="panel-body table-wrap"><table class="table"><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>{#each users as user}<tr><td><div class="main-text">{user.display_name}</div><div class="sub-text">@{user.username}</div></td><td><span class="status blue">{isPrimaryAdmin(user) ? '主管理员' : user.role === 'admin' ? '子管理员' : '普通用户'}</span></td><td><span class={'status ' + (user.status === 'active' ? 'green' : 'red')}>{user.status === 'active' ? '启用' : '禁用'}</span></td><td>{user.points}</td><td>{user.created_at}</td><td>{user.last_login || '-'}</td><td><button class="btn btn-text" disabled={cannotChangeRole(user)} on:click={() => toggleUserRole(user)}>{roleActionLabel(user)}</button><button class="btn btn-text" disabled={cannotToggleStatus(user)} on:click={() => toggleUser(user)}>{statusActionLabel(user)}</button></td></tr>{/each}</tbody></table></div></div>
         {/if}
 
         {#if activeTab === 'points'}

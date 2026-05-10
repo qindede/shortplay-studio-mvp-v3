@@ -8,6 +8,12 @@ from ..services import change_points, user_in_data
 from ..store import snapshot, update
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+PRIMARY_ADMIN_ID = "user_admin"
+PRIMARY_ADMIN_USERNAME = "admin"
+
+
+def is_primary_admin(user: dict) -> bool:
+    return user.get("id") == PRIMARY_ADMIN_ID or user.get("username") == PRIMARY_ADMIN_USERNAME
 
 
 @router.get("/summary")
@@ -37,6 +43,18 @@ def admin_users(admin: dict = Depends(require_admin)):
 def admin_update_user(user_id: str, payload: AdminUserUpdate, admin: dict = Depends(require_admin)):
     def mutate(data):
         target = user_in_data(data, user_id)
+        is_self_update = target["id"] == admin["id"]
+        is_primary_update = is_primary_admin(target)
+        if is_self_update and payload.status == "disabled":
+            raise HTTPException(status_code=400, detail="不能禁用当前登录的管理员账号")
+        if is_self_update and payload.role == "user":
+            raise HTTPException(status_code=400, detail="不能移除当前登录账号的管理员角色")
+        if payload.role == "admin" and not is_primary_admin(admin):
+            raise HTTPException(status_code=403, detail="只有主管理员可以添加子管理员")
+        if is_primary_update and payload.status == "disabled":
+            raise HTTPException(status_code=400, detail="不能禁用主管理员账号")
+        if is_primary_update and payload.role == "user":
+            raise HTTPException(status_code=400, detail="不能修改主管理员角色")
         if payload.role is not None:
             target["role"] = payload.role
         if payload.status is not None:
