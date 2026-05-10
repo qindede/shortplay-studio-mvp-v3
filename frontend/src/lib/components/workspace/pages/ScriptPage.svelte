@@ -177,21 +177,6 @@
         <div class="export-row"><span>成片版本</span><b>{versions.length} 个</b></div>
         <div class="export-row"><span>预计时长</span><b>{episodeDuration}s</b></div>
       </div>
-
-      <div class="panel companion-panel">
-        <div class="panel-head">
-          <div>
-            <div class="panel-title">本集素材</div>
-            <div class="panel-subtitle">从项目素材库复用角色和场景。</div>
-          </div>
-        </div>
-
-        <div class="panel-body">
-          <div class="info-card"><div class="label">角色</div><div class="value">{characterNames}</div></div>
-          <div class="info-card"><div class="label">场景</div><div class="value">{sceneName}</div></div>
-          <button class="btn btn-secondary full-width" on:click={() => setPage('assets')}>管理素材</button>
-        </div>
-      </div>
     </div>
 
     {#if shotEditorOpen}
