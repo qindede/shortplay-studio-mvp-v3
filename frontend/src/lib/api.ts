@@ -32,7 +32,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     let message = `Request failed: ${response.status}`;
     try {
       const body = await response.json();
-      message = body.detail || message;
+      if (Array.isArray(body.detail)) {
+        message = body.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ');
+      } else if (typeof body.detail === 'string') {
+        message = body.detail;
+      }
     } catch {
       const text = await response.text();
       message = text || message;
