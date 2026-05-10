@@ -76,6 +76,11 @@ export interface PointLedger {
   created_at: string;
 }
 
+export interface PointLedgerResponse {
+  items: PointLedger[];
+  total: number;
+}
+
 export interface AdminSummary {
   user_count: number;
   active_user_count: number;
@@ -210,7 +215,7 @@ export const api = {
   me: () => request<User>('/api/me'),
   changePassword: (body: { current_password: string; new_password: string }) =>
     request<{ ok: boolean }>('/api/me/password', { method: 'PATCH', body: JSON.stringify(body) }),
-  myLedger: () => request<PointLedger[]>('/api/me/point-ledger'),
+  myLedger: (page = 1, pageSize = 10) => request<PointLedgerResponse>(`/api/me/point-ledger?page=${page}&page_size=${pageSize}`),
 
   dashboard: () => request<Dashboard>('/api/dashboard'),
   projects: () => request<Project[]>('/api/projects'),

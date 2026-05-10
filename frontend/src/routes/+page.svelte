@@ -9,7 +9,7 @@
     type Asset,
     type Dashboard,
     type Episode,
-    type PointLedger,
+    type PointLedgerResponse,
     type Project,
     type ProjectOutlineEpisode,
     type Shot,
@@ -50,7 +50,7 @@
   let authMode: AuthMode = 'login';
   let authUsername = '';
   let authPassword = '';
-  let pointLedger: PointLedger[] = [];
+  let pointLedger: PointLedgerResponse = { items: [], total: 0 };
 
   let dashboard: Dashboard | null = null;
   let usage: Usage | null = null;
@@ -168,7 +168,7 @@
     assets = [];
     videoTasks = [];
     versions = [];
-    pointLedger = [];
+    pointLedger = { items: [], total: 0 };
     assetType = 'all';
     projectPickerOpen = false;
     activePage = 'projects';

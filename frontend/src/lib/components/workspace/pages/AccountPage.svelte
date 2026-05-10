@@ -1,15 +1,33 @@
 <script lang="ts">
-  import type { PointLedger, Usage, User } from '$lib/api';
+  import type { PointLedgerResponse, Usage, User } from '$lib/api';
+  import { api } from '$lib/api';
   import { getUsagePercent } from '$lib/workspace/ui';
 
   export let currentUser: User;
   export let usage: Usage | null = null;
   export let pointBalance = 0;
-  export let pointLedger: PointLedger[] = [];
+  export let pointLedger: PointLedgerResponse = { items: [], total: 0 };
+
+  const PAGE_SIZE = 10;
+  let currentPage = 1;
+  let loading = false;
+
+  $: totalPages = Math.max(1, Math.ceil(pointLedger.total / PAGE_SIZE));
 
   $: videoUsedPercent = usage ? getUsagePercent(usage.video_used_seconds, usage.video_total_seconds) : 0;
   $: imageUsedPercent = usage ? getUsagePercent(usage.image_used, usage.image_total) : 0;
   $: exportUsedPercent = usage ? getUsagePercent(usage.export_used, usage.export_total) : 0;
+
+  async function goToPage(page: number) {
+    if (page < 1 || page > totalPages || loading) return;
+    loading = true;
+    currentPage = page;
+    try {
+      pointLedger = await api.myLedger(page, PAGE_SIZE);
+    } finally {
+      loading = false;
+    }
+  }
 </script>
 
 <div class="metrics">
@@ -41,7 +59,7 @@
     <div class="panel-head">
       <div>
         <div class="panel-title">积分流水</div>
-        <div class="panel-subtitle">展示当前账号最近 100 条积分变化。</div>
+        <div class="panel-subtitle">共 {pointLedger.total} 条记录，每页 {PAGE_SIZE} 条。</div>
       </div>
     </div>
 
@@ -49,19 +67,27 @@
       <table class="table">
         <thead><tr><th>时间</th><th>场景</th><th>说明</th><th>变动</th><th>余额</th></tr></thead>
         <tbody>
-          {#each pointLedger as row}
+          {#each pointLedger.items as row}
             <tr>
               <td>{row.created_at}</td>
-              <td><div class="main-text">{row.scene}</div><div class="sub-text">{row.type}</div></td>
+              <td>{row.scene}</td>
               <td>{row.description}</td>
               <td><span class={row.amount >= 0 ? 'amount plus' : 'amount minus'}>{row.amount >= 0 ? '+' : ''}{row.amount}</span></td>
               <td>{row.balance_after}</td>
             </tr>
           {:else}
-            <tr><td colspan="5"><div class="sub-text">暂无积分记录。</div></td></tr>
+            <tr><td colspan="5"><div class="sub-text">{loading ? '加载中...' : '暂无积分记录。'}</div></td></tr>
           {/each}
         </tbody>
       </table>
+
+      {#if totalPages > 1}
+        <div class="pagination">
+          <button class="page-btn" disabled={currentPage <= 1 || loading} on:click={() => goToPage(currentPage - 1)}>上一页</button>
+          <span class="page-info">{currentPage} / {totalPages}</span>
+          <button class="page-btn" disabled={currentPage >= totalPages || loading} on:click={() => goToPage(currentPage + 1)}>下一页</button>
+        </div>
+      {/if}
     </div>
   </div>
 </div>

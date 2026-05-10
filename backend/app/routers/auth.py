@@ -79,6 +79,9 @@ def change_my_password(payload: ChangePasswordRequest, user: dict = Depends(get_
 
 
 @router.get("/me/point-ledger")
-def my_point_ledger(user: dict = Depends(get_current_user)):
+def my_point_ledger(page: int = 1, page_size: int = 10, user: dict = Depends(get_current_user)):
     data = snapshot()
-    return [e for e in data.get("point_ledger", []) if e["user_id"] == user["id"]][:100]
+    rows = [e for e in data.get("point_ledger", []) if e["user_id"] == user["id"]]
+    total = len(rows)
+    start = (page - 1) * page_size
+    return {"items": rows[start:start + page_size], "total": total}
