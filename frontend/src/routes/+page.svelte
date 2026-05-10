@@ -529,13 +529,46 @@
     });
   }
 
+  async function runEpisodeVideoGeneration(episode: Episode) {
+    selectedEpisode = episode;
+    fillEpisodeForm(episode);
+    videoTasks = await api.generateVideos(episode.id);
+    shots = await api.shots(episode.id);
+    await refreshDashboard();
+    await reloadCurrentProject();
+    activePage = 'video';
+  }
+
   async function batchGenerateVideos() {
     const episodeToRender = selectedEpisode;
     if (!episodeToRender) return;
 
     await safeRun(async () => {
-      videoTasks = await api.generateVideos(episodeToRender.id);
-      shots = await api.shots(episodeToRender.id);
+      await runEpisodeVideoGeneration(episodeToRender);
+    });
+  }
+
+  async function generateVideosForEpisode(episode: Episode) {
+    await safeRun(async () => {
+      await runEpisodeVideoGeneration(episode);
+    });
+  }
+
+  async function generateVideoForShot(shot: Shot) {
+    const episode = selectedEpisode;
+    if (!episode) return;
+
+    await safeRun(async () => {
+      await api.generateShotVideo(shot.id);
+      shots = await api.shots(episode.id);
+      videoTasks = await api.videoTasks(episode.id);
+
+      if (currentProject) {
+        episodes = await api.episodes(currentProject.id);
+        selectedEpisode = episodes.find((item) => item.id === episode.id) || episode;
+        versions = await api.versions(currentProject.id, episode.id);
+      }
+
       await refreshDashboard();
       activePage = 'video';
     });
@@ -670,7 +703,7 @@
           {/if}
 
           {#if activePage === 'episodes'}
-            <EpisodesPage {episodes} {selectEpisode} {deleteEpisode} />
+            <EpisodesPage {episodes} {selectEpisode} {generateVideosForEpisode} {deleteEpisode} />
           {/if}
 
           {#if activePage === 'script'}
@@ -684,10 +717,9 @@
               bind:episodeSummary
               bind:episodeScript
               bind:episodeDuration
-              {setPage}
               {saveEpisodeOnly}
               {saveAndGenerateStoryboard}
-              {batchGenerateVideos}
+              {generateVideoForShot}
               {createShot}
               {updateShot}
               {deleteShot}

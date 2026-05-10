@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Asset, Episode, Project, Shot, ShotPayload, ShotUpdate, VideoVersion } from '$lib/api';
-  import { getStatusClass, getStatusLabel, type PageKey } from '$lib/workspace/ui';
+  import { getStatusClass, getStatusLabel } from '$lib/workspace/ui';
 
   export let selectedEpisode: Episode | null = null;
   export let currentProject: Project | null = null;
@@ -11,10 +11,9 @@
   export let episodeSummary = '';
   export let episodeScript = '';
   export let episodeDuration = 30;
-  export let setPage: (page: PageKey) => void | Promise<void>;
   export let saveEpisodeOnly: () => void | Promise<void>;
   export let saveAndGenerateStoryboard: () => void | Promise<void>;
-  export let batchGenerateVideos: () => void | Promise<void>;
+  export let generateVideoForShot: (shot: Shot) => void | Promise<void>;
   export let createShot: (payload: ShotPayload) => void | Promise<void>;
   export let updateShot: (shotId: string, payload: ShotUpdate) => void | Promise<void>;
   export let deleteShot: (shot: Shot) => void | Promise<void>;
@@ -130,6 +129,7 @@
                   <td>
                     <div class="table-actions">
                       <button class="btn btn-text" on:click={() => openShotEditor(shot)}>修改</button>
+                      <button class="btn btn-text" on:click={() => generateVideoForShot(shot)}>生成视频</button>
                       <button class="btn btn-text btn-danger" on:click={() => deleteShot(shot)}>删除</button>
                     </div>
                   </td>

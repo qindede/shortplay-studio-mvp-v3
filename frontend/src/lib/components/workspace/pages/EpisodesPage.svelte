@@ -4,6 +4,7 @@
 
   export let episodes: Episode[] = [];
   export let selectEpisode: (episode: Episode, goScript?: boolean) => void | Promise<void>;
+  export let generateVideosForEpisode: (episode: Episode) => void | Promise<void>;
   export let deleteEpisode: (episode: Episode) => void | Promise<void>;
 </script>
 
@@ -31,6 +32,7 @@
               <td>
                 <div class="table-actions">
                   <button class="btn btn-text" on:click={() => selectEpisode(episode, true)}>编辑</button>
+                  <button class="btn btn-text" on:click={() => generateVideosForEpisode(episode)}>生成视频</button>
                   <button class="btn btn-text btn-danger" on:click={() => deleteEpisode(episode)}>删除</button>
                 </div>
               </td>

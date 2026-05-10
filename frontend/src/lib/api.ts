@@ -227,6 +227,7 @@ export const api = {
   deleteShot: (shotId: string) =>
     request<{ ok: boolean }>(`/api/shots/${shotId}`, { method: 'DELETE' }),
   generateStoryboard: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/generate-storyboard`, { method: 'POST' }),
+  generateShotVideo: (shotId: string) => request<VideoTask>(`/api/shots/${shotId}/generate-video`, { method: 'POST' }),
   generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
   videoTasks: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/video-tasks`),
   assets: (projectId: string, type?: string) => request<Asset[]>(`/api/projects/${projectId}/assets${type ? `?type=${type}` : ''}`),
