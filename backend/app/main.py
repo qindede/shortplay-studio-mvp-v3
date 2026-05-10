@@ -91,6 +91,15 @@ class AssetCreate(BaseModel):
     initial: str = "素"
 
 
+class ShotCreate(BaseModel):
+    title: str = Field(min_length=1)
+    visual: str = ""
+    dialogue: str = ""
+    characters: list[str] = Field(default_factory=list)
+    scene: str = ""
+    duration: int = 3
+
+
 class ShotUpdate(BaseModel):
     title: str | None = None
     visual: str | None = None
@@ -98,7 +107,6 @@ class ShotUpdate(BaseModel):
     characters: list[str] | None = None
     scene: str | None = None
     duration: int | None = None
-    status: str | None = None
 
 
 class ComposeRequest(BaseModel):
@@ -483,6 +491,40 @@ def list_shots(episode_id: str, user: dict = Depends(get_current_user)):
     shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
     shots.sort(key=lambda x: x["no"])
     return shots
+
+
+@app.post("/api/episodes/{episode_id}/shots")
+def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        episode = next((e for e in data["episodes"] if e["id"] == episode_id), None)
+        if not episode:
+            not_found("episode")
+
+        episode_shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
+        shot = {
+            "id": uid("shot"),
+            "episode_id": episode_id,
+            "no": max([s["no"] for s in episode_shots], default=0) + 1,
+            "title": payload.title,
+            "visual": payload.visual,
+            "dialogue": payload.dialogue,
+            "characters": payload.characters,
+            "scene": payload.scene,
+            "duration": max(1, int(payload.duration)),
+            "status": "pending",
+            "updated_at": now(),
+        }
+        data["shots"].append(shot)
+
+        episode["status"] = "storyboard_ready"
+        episode["updated_at"] = shot["updated_at"]
+        project = next((p for p in data["projects"] if p["id"] == episode["project_id"]), None)
+        if project:
+            project["updated_at"] = shot["updated_at"]
+
+        return shot
+
+    return update(mutate)
 
 
 def build_storyboard(episode: dict) -> list[dict]:

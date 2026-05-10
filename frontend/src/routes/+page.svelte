@@ -13,6 +13,7 @@
     type Project,
     type ProjectOutlineEpisode,
     type Shot,
+    type ShotPayload,
     type ShotUpdate,
     type Usage,
     type User,
@@ -497,6 +498,24 @@
     }
   }
 
+  async function createShot(payload: ShotPayload) {
+    const episode = selectedEpisode;
+    if (!episode) return;
+
+    error = '';
+    try {
+      const createdShot = await api.createShot(episode.id, payload);
+      shots = [...shots, createdShot].sort((a, b) => a.no - b.no);
+      if (currentProject) {
+        episodes = await api.episodes(currentProject.id);
+        selectedEpisode = episodes.find((item) => item.id === episode.id) || selectedEpisode;
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : '操作失败';
+      throw err;
+    }
+  }
+
   async function deleteShot(shot: Shot) {
     if (!confirm(`确定删除镜头 #${String(shot.no).padStart(2, '0')}「${shot.title}」吗？相关视频任务也会一并删除。`)) {
       return;
@@ -506,7 +525,10 @@
       await api.deleteShot(shot.id);
       if (selectedEpisode) {
         shots = await api.shots(selectedEpisode.id);
-        await reloadCurrentProject();
+        if (currentProject) {
+          episodes = await api.episodes(currentProject.id);
+          selectedEpisode = episodes.find((item) => item.id === selectedEpisode?.id) || selectedEpisode;
+        }
       } else {
         shots = shots.filter((item) => item.id !== shot.id);
       }
@@ -612,6 +634,7 @@
               {saveEpisodeOnly}
               {saveAndGenerateStoryboard}
               {batchGenerateVideos}
+              {createShot}
               {updateShot}
               {deleteShot}
             />

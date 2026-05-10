@@ -39,7 +39,7 @@
       <button class="btn btn-secondary" on:click={refreshDashboard}>刷新额度</button>
     {/if}
 
-    {#if activePage !== 'account'}
+    {#if activePage !== 'account' && activePage !== 'script'}
       <button class="btn btn-primary" on:click={handleTopAction}>{currentMeta.actionLabel}</button>
     {/if}
   </div>

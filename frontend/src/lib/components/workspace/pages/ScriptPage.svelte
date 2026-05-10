@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Asset, Episode, Project, Shot, ShotUpdate, VideoVersion } from '$lib/api';
+  import type { Asset, Episode, Project, Shot, ShotPayload, ShotUpdate, VideoVersion } from '$lib/api';
   import { getStatusClass, getStatusLabel, type PageKey } from '$lib/workspace/ui';
 
   export let selectedEpisode: Episode | null = null;
@@ -15,9 +15,12 @@
   export let saveEpisodeOnly: () => void | Promise<void>;
   export let saveAndGenerateStoryboard: () => void | Promise<void>;
   export let batchGenerateVideos: () => void | Promise<void>;
+  export let createShot: (payload: ShotPayload) => void | Promise<void>;
   export let updateShot: (shotId: string, payload: ShotUpdate) => void | Promise<void>;
   export let deleteShot: (shot: Shot) => void | Promise<void>;
 
+  let shotEditorOpen = false;
+  let shotEditorMode: 'create' | 'edit' = 'edit';
   let editingShot: Shot | null = null;
   let editTitle = '';
   let editVisual = '';
@@ -25,7 +28,6 @@
   let editCharacters = '';
   let editScene = '';
   let editDuration = 1;
-  let editStatus: Shot['status'] = 'pending';
   let shotSaving = false;
 
   $: characterNames =
@@ -36,7 +38,21 @@
       .join('、') || '未配置';
   $: sceneName = assets.find((asset) => asset.type === 'scene')?.name || '未配置';
 
+  function openShotCreator() {
+    shotEditorOpen = true;
+    shotEditorMode = 'create';
+    editingShot = null;
+    editTitle = '';
+    editVisual = '';
+    editDialogue = '';
+    editCharacters = characterNames === '未配置' ? '' : characterNames;
+    editScene = sceneName === '未配置' ? '' : sceneName;
+    editDuration = 3;
+  }
+
   function openShotEditor(shot: Shot) {
+    shotEditorOpen = true;
+    shotEditorMode = 'edit';
     editingShot = shot;
     editTitle = shot.title;
     editVisual = shot.visual;
@@ -44,10 +60,10 @@
     editCharacters = shot.characters.join('、');
     editScene = shot.scene;
     editDuration = shot.duration;
-    editStatus = shot.status;
   }
 
   function closeShotEditor() {
+    shotEditorOpen = false;
     editingShot = null;
   }
 
@@ -59,19 +75,24 @@
   }
 
   async function saveShotEdit() {
-    if (!editingShot || shotSaving) return;
+    if (!shotEditorOpen || shotSaving) return;
+
+    const payload = {
+      title: editTitle.trim() || '未命名分镜',
+      visual: editVisual.trim(),
+      dialogue: editDialogue.trim(),
+      characters: parseCharacters(editCharacters),
+      scene: editScene.trim(),
+      duration: Math.max(1, Number(editDuration) || 1)
+    };
 
     shotSaving = true;
     try {
-      await updateShot(editingShot.id, {
-        title: editTitle.trim(),
-        visual: editVisual.trim(),
-        dialogue: editDialogue.trim(),
-        characters: parseCharacters(editCharacters),
-        scene: editScene.trim(),
-        duration: Math.max(1, Number(editDuration) || 1),
-        status: editStatus
-      });
+      if (shotEditorMode === 'create') {
+        await createShot(payload);
+      } else if (editingShot) {
+        await updateShot(editingShot.id, payload);
+      }
       closeShotEditor();
     } finally {
       shotSaving = false;
@@ -89,7 +110,7 @@
             <div class="panel-subtitle">每个镜头都可以独立进入视频生成，并保留状态回看。</div>
           </div>
           <div class="panel-actions">
-            <button class="btn btn-secondary" on:click={saveAndGenerateStoryboard}>生成 / 更新分镜</button>
+            <button class="btn btn-secondary" on:click={openShotCreator}>新增分镜</button>
             <button class="btn btn-primary" on:click={batchGenerateVideos}>批量生成视频</button>
           </div>
         </div>
@@ -108,13 +129,13 @@
                   <td><span class={'status ' + getStatusClass(shot.status)}>{getStatusLabel(shot.status)}</span></td>
                   <td>
                     <div class="table-actions">
-                      <button class="btn btn-text" on:click={() => openShotEditor(shot)}>编辑</button>
+                      <button class="btn btn-text" on:click={() => openShotEditor(shot)}>更新分镜</button>
                       <button class="btn btn-text btn-danger" on:click={() => deleteShot(shot)}>删除</button>
                     </div>
                   </td>
                 </tr>
               {:else}
-                <tr><td colspan="7"><div class="sub-text">暂无分镜。点击“生成 / 更新分镜”后，镜头表会出现在这里。</div></td></tr>
+                <tr><td colspan="7"><div class="sub-text">暂无分镜。可以新增单条分镜，或在右侧“本集脚本”中智能生成整集分镜。</div></td></tr>
               {/each}
             </tbody>
           </table>
@@ -129,7 +150,6 @@
             <div class="panel-title">本集脚本</div>
             <div class="panel-subtitle">先打磨情绪曲线，再生成可以直接进入视频生产的镜头表。</div>
           </div>
-          <button class="btn btn-secondary" on:click={saveEpisodeOnly}>保存草稿</button>
         </div>
 
         <div class="panel-body">
@@ -141,12 +161,10 @@
           <div class="field">
             <label for="episode-script">剧情内容</label>
             <textarea id="episode-script" bind:value={episodeScript}></textarea>
-            <div class="tag-list">
-              <span class="tag">身份反转</span>
-              <span class="tag">订婚现场</span>
-              <span class="tag">当众打脸</span>
-              <span class="tag">强情绪冲突</span>
-            </div>
+          </div>
+          <div class="panel-actions script-editor-actions">
+            <button class="btn btn-secondary" on:click={saveEpisodeOnly}>保存</button>
+            <button class="btn btn-primary" on:click={saveAndGenerateStoryboard}>智能生成 / 更新分镜（20积分）</button>
           </div>
         </div>
       </div>
@@ -176,13 +194,15 @@
       </div>
     </div>
 
-    {#if editingShot}
+    {#if shotEditorOpen}
       <div class="modal-backdrop">
         <div class="modal-panel shot-edit-modal">
           <div class="modal-head">
             <div>
-              <div class="modal-title-accent">编辑镜头 #{String(editingShot.no).padStart(2, '0')}</div>
-              <div class="panel-subtitle">调整画面、台词、角色和生成状态。</div>
+              <div class="modal-title-accent">
+                {shotEditorMode === 'create' ? '新增分镜' : `更新分镜 #${String(editingShot?.no || 0).padStart(2, '0')}`}
+              </div>
+              <div class="panel-subtitle">调整画面、台词、角色、场景和时长。</div>
             </div>
             <button class="modal-close" aria-label="关闭" on:click={closeShotEditor}>×</button>
           </div>
@@ -198,20 +218,13 @@
               <div class="field"><label for="shot-characters">角色</label><input id="shot-characters" bind:value={editCharacters} /></div>
               <div class="field"><label for="shot-scene">场景</label><input id="shot-scene" bind:value={editScene} /></div>
             </div>
-            <div class="field">
-              <label for="shot-status">状态</label>
-              <select id="shot-status" bind:value={editStatus}>
-                <option value="pending">待生成</option>
-                <option value="generating">生成中</option>
-                <option value="completed">已完成</option>
-                <option value="needs_review">待审核</option>
-              </select>
-            </div>
           </div>
 
           <div class="modal-actions">
             <button class="btn btn-secondary" disabled={shotSaving} on:click={closeShotEditor}>取消</button>
-            <button class="btn btn-primary" disabled={shotSaving} on:click={saveShotEdit}>{shotSaving ? '保存中...' : '保存修改'}</button>
+            <button class="btn btn-primary" disabled={shotSaving} on:click={saveShotEdit}>
+              {shotSaving ? '保存中...' : shotEditorMode === 'create' ? '新增分镜' : '保存更新'}
+            </button>
           </div>
         </div>
       </div>

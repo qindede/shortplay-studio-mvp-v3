@@ -1045,6 +1045,9 @@ textarea {
 .script-editor textarea {
   min-height: 280px;
 }
+.script-editor-actions {
+  padding-top: 4px;
+}
 .compact-textarea {
   min-height: 96px;
 }
