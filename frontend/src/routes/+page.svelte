@@ -408,6 +408,46 @@
     });
   }
 
+  async function deleteEpisode(episode: Episode) {
+    const project = currentProject;
+    if (!project) return;
+
+    const confirmed = confirm(
+      `确定删除第 ${String(episode.no).padStart(2, '0')} 集「${episode.title}」吗？相关分镜、视频任务和成片版本也会一并删除。`
+    );
+    if (!confirmed) return;
+
+    await safeRun(async () => {
+      const wasSelected = selectedEpisode?.id === episode.id;
+      await api.deleteEpisode(episode.id);
+      await refreshDashboard();
+
+      episodes = await api.episodes(project.id);
+
+      if (episodes.length === 0) {
+        selectedEpisode = null;
+        shots = [];
+        videoTasks = [];
+        versions = await api.versions(project.id);
+        resetEpisodeForm();
+        activePage = 'episodes';
+        return;
+      }
+
+      if (wasSelected) {
+        const nextEpisode = episodes.find((item) => item.no > episode.no) || episodes[episodes.length - 1];
+        await selectEpisode(nextEpisode, false);
+        activePage = 'episodes';
+        return;
+      }
+
+      const freshSelected = episodes.find((item) => item.id === selectedEpisode?.id);
+      if (freshSelected) {
+        await selectEpisode(freshSelected, false);
+      }
+    });
+  }
+
   async function saveEpisodeOnly() {
     const episodeToSave = selectedEpisode;
     if (!episodeToSave) return;
@@ -526,7 +566,7 @@
           {/if}
 
           {#if activePage === 'episodes'}
-            <EpisodesPage {episodes} {selectEpisode} {createEpisode} />
+            <EpisodesPage {episodes} {selectEpisode} {deleteEpisode} />
           {/if}
 
           {#if activePage === 'script'}

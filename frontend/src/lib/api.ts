@@ -214,6 +214,8 @@ export const api = {
     request<Episode>(`/api/projects/${projectId}/episodes`, { method: 'POST', body: JSON.stringify(body) }),
   updateEpisode: (episodeId: string, body: Partial<Episode>) =>
     request<Episode>(`/api/episodes/${episodeId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteEpisode: (episodeId: string) =>
+    request<{ ok: boolean }>(`/api/episodes/${episodeId}`, { method: 'DELETE' }),
   shots: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/shots`),
   generateStoryboard: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/generate-storyboard`, { method: 'POST' }),
   generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),

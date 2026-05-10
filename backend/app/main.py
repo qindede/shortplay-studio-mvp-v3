@@ -450,6 +450,33 @@ def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends
     return update(mutate)
 
 
+@app.delete("/api/episodes/{episode_id}")
+def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        episode = next((e for e in data["episodes"] if e["id"] == episode_id), None)
+        if not episode:
+            not_found("episode")
+
+        project_id = episode["project_id"]
+        data["episodes"] = [e for e in data["episodes"] if e["id"] != episode_id]
+        data["shots"] = [s for s in data["shots"] if s["episode_id"] != episode_id]
+        data["video_tasks"] = [t for t in data["video_tasks"] if t["episode_id"] != episode_id]
+        data["video_versions"] = [v for v in data["video_versions"] if v["episode_id"] != episode_id]
+
+        project_episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
+        project_episodes.sort(key=lambda item: item["no"])
+        for index, item in enumerate(project_episodes, start=1):
+            item["no"] = index
+
+        project = next((p for p in data["projects"] if p["id"] == project_id), None)
+        if project:
+            project["updated_at"] = now()
+
+        return {"ok": True}
+
+    return update(mutate)
+
+
 @app.get("/api/episodes/{episode_id}/shots")
 def list_shots(episode_id: str, user: dict = Depends(get_current_user)):
     data = snapshot()

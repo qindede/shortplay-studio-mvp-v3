@@ -543,6 +543,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: rgba(216, 255, 107, 0.18);
   transform: none;
 }
+.btn-danger {
+  color: var(--red);
+  background: var(--red-soft);
+}
+.btn-danger:hover {
+  background: rgba(255, 123, 138, 0.22);
+}
 .btn:disabled {
   cursor: not-allowed;
   opacity: .48;
@@ -966,6 +973,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .table td:last-child {
   border-right: 1px solid var(--line);
   border-radius: 0 var(--radius) var(--radius) 0;
+}
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .main-text {
   font-weight: 850;
