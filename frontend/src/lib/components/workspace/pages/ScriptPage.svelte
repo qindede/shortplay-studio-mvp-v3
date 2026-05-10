@@ -129,7 +129,7 @@
                   <td><span class={'status ' + getStatusClass(shot.status)}>{getStatusLabel(shot.status)}</span></td>
                   <td>
                     <div class="table-actions">
-                      <button class="btn btn-text" on:click={() => openShotEditor(shot)}>更新分镜</button>
+                      <button class="btn btn-text" on:click={() => openShotEditor(shot)}>修改</button>
                       <button class="btn btn-text btn-danger" on:click={() => deleteShot(shot)}>删除</button>
                     </div>
                   </td>
@@ -185,7 +185,7 @@
           <div class="modal-head">
             <div>
               <div class="modal-title-accent">
-                {shotEditorMode === 'create' ? '新增分镜' : `更新分镜 #${String(editingShot?.no || 0).padStart(2, '0')}`}
+                {shotEditorMode === 'create' ? '新增分镜' : `修改分镜 #${String(editingShot?.no || 0).padStart(2, '0')}`}
               </div>
               <div class="panel-subtitle">调整画面、台词、角色、场景和时长。</div>
             </div>
