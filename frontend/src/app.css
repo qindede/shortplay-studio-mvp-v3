@@ -336,8 +336,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   place-items: center;
   background: var(--surface-2);
   color: inherit;
-  font-size: 11px;
-  font-weight: 900;
+  line-height: 0;
+}
+.nav-icon svg {
+  width: 15px;
+  height: 15px;
 }
 .nav-item.active .nav-icon {
   background: var(--ink);

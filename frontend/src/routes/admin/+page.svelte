@@ -3,8 +3,9 @@
   import { goto } from '$app/navigation';
   import { api, clearAuthToken, loadAuthToken, setAuthToken, type AdminSummary, type PointLedger, type User } from '$lib/api';
 
-  type AdminTab = 'overview' | 'users' | 'points' | 'ledger';
+  type AdminTab = 'overview' | 'users' | 'points' | 'ledger' | 'password';
   const PRIMARY_ADMIN_ID = 'user_admin';
+  const DEFAULT_RESET_PASSWORD = 'muran123';
 
   let currentUser: User | null = null;
   let activeTab: AdminTab = 'overview';
@@ -21,9 +22,7 @@
   let adminNewPassword = '';
   let adminConfirmPassword = '';
   let adminPasswordSaving = false;
-  let resetUserId = '';
-  let resetNewPassword = '';
-  let resetPasswordSaving = false;
+  let resetPasswordUserId = '';
 
   onMount(load);
 
@@ -130,32 +129,22 @@
     }
   }
 
-  async function resetUserPassword() {
+  async function resetUserPassword(user: User) {
     error = '';
     message = '';
-    const target = users.find((user) => user.id === resetUserId);
-    if (!target) {
-      error = '请选择需要重置密码的账号';
-      return;
-    }
-    if (!canResetPassword(target)) {
+    if (!canResetPassword(user)) {
       error = '不能在后台重置该账号密码';
       return;
     }
-    if (resetNewPassword.length < 6) {
-      error = '新密码至少 6 位';
-      return;
-    }
 
-    resetPasswordSaving = true;
+    resetPasswordUserId = user.id;
     try {
-      await api.adminResetPassword(target.id, { password: resetNewPassword });
-      resetNewPassword = '';
-      message = `已重置 ${target.display_name} 的密码`;
+      await api.adminResetPassword(user.id, { password: DEFAULT_RESET_PASSWORD });
+      message = `已将 ${user.display_name} 的密码重置为 ${DEFAULT_RESET_PASSWORD}`;
     } catch (err) {
       error = err instanceof Error ? err.message : '重置失败';
     } finally {
-      resetPasswordSaving = false;
+      resetPasswordUserId = '';
     }
   }
 
@@ -202,10 +191,12 @@
     return !isSelf(user) && !isPrimaryAdmin(user);
   }
 
-  $: resettableUsers = users.filter(canResetPassword);
-  $: if (!resetUserId && resettableUsers.length > 0) resetUserId = resettableUsers[0].id;
-  $: if (resetUserId && !resettableUsers.some((user) => user.id === resetUserId)) {
-    resetUserId = resettableUsers[0]?.id || '';
+  function currentAdminTabTitle() {
+    if (activeTab === 'overview') return '运营概览';
+    if (activeTab === 'users') return '用户管理';
+    if (activeTab === 'points') return '积分调整';
+    if (activeTab === 'ledger') return '积分流水';
+    return '密码安全';
   }
 
   function logout() {
@@ -230,6 +221,7 @@
       <button class:active={activeTab === 'users'} class="nav-item" on:click={() => activeTab = 'users'}><span class="nav-icon">用</span><span>用户管理</span></button>
       <button class:active={activeTab === 'points'} class="nav-item" on:click={() => activeTab = 'points'}><span class="nav-icon">积</span><span>积分调整</span></button>
       <button class:active={activeTab === 'ledger'} class="nav-item" on:click={() => activeTab = 'ledger'}><span class="nav-icon">流</span><span>积分流水</span></button>
+      <button class:active={activeTab === 'password'} class="nav-item" on:click={() => activeTab = 'password'}><span class="nav-icon">密</span><span>密码安全</span></button>
     </div>
 
     <div class="admin-side-footer">
@@ -251,7 +243,7 @@
   <main class="main">
     <div class="topbar">
       <div>
-        <div class="crumbs"><span>管理员后台</span><span>/</span><strong>{activeTab === 'overview' ? '运营概览' : activeTab === 'users' ? '用户管理' : activeTab === 'points' ? '积分调整' : '积分流水'}</strong></div>
+        <div class="crumbs"><span>管理员后台</span><span>/</span><strong>{currentAdminTabTitle()}</strong></div>
         <div class="sub-context">平台运营、用户与积分管理</div>
       </div>
     </div>
@@ -273,37 +265,90 @@
         {/if}
 
         {#if activeTab === 'users'}
-          <div class="admin-layout">
-            <div class="panel">
-              <div class="panel-head"><div><div class="panel-title">修改当前密码</div><div class="panel-subtitle">更新当前登录管理员账号的密码。</div></div></div>
-              <div class="panel-body">
-                <div class="field"><label for="admin-current-password">当前密码</label><input id="admin-current-password" type="password" bind:value={adminCurrentPassword} autocomplete="current-password" /></div>
-                <div class="field"><label for="admin-new-password">新密码</label><input id="admin-new-password" type="password" bind:value={adminNewPassword} autocomplete="new-password" /></div>
-                <div class="field"><label for="admin-confirm-password">确认新密码</label><input id="admin-confirm-password" type="password" bind:value={adminConfirmPassword} autocomplete="new-password" /></div>
-                <button class="btn btn-primary" style="width:100%;" disabled={adminPasswordSaving} on:click={changeAdminPassword}>{adminPasswordSaving ? '正在保存...' : '修改密码'}</button>
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">用户列表</div>
+                <div class="panel-subtitle">共 {users.length} 个账号</div>
               </div>
             </div>
-            <div class="panel">
-              <div class="panel-head"><div><div class="panel-title">重置用户密码</div><div class="panel-subtitle">为普通用户或子管理员设置新密码。</div></div></div>
-              <div class="panel-body">
-                <div class="field"><label for="admin-reset-user">选择账号</label><select id="admin-reset-user" bind:value={resetUserId} disabled={resettableUsers.length === 0}>{#each resettableUsers as user}<option value={user.id}>{user.display_name} / @{user.username}</option>{/each}</select></div>
-                <div class="field"><label for="admin-reset-password">新密码</label><input id="admin-reset-password" type="password" bind:value={resetNewPassword} autocomplete="new-password" /></div>
-                <button class="btn btn-primary" style="width:100%;" disabled={resetPasswordSaving || resettableUsers.length === 0} on:click={resetUserPassword}>{resetPasswordSaving ? '正在重置...' : '重置密码'}</button>
-              </div>
+            <div class="panel-body table-wrap">
+              <table class="table">
+                <thead><tr><th>用户</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead>
+                <tbody>
+                  {#each users as user}
+                    <tr>
+                      <td><div class="main-text">{user.display_name}</div><div class="sub-text">@{user.username}</div></td>
+                      <td><span class="status blue">{isPrimaryAdmin(user) ? '主管理员' : user.role === 'admin' ? '子管理员' : '普通用户'}</span></td>
+                      <td><span class={'status ' + (user.status === 'active' ? 'green' : 'red')}>{user.status === 'active' ? '启用' : '禁用'}</span></td>
+                      <td>{user.points}</td>
+                      <td>{user.created_at}</td>
+                      <td>{user.last_login || '-'}</td>
+                      <td>
+                        <button class="btn btn-text" disabled={cannotChangeRole(user)} on:click={() => toggleUserRole(user)}>{roleActionLabel(user)}</button>
+                        <button class="btn btn-text" disabled={cannotToggleStatus(user)} on:click={() => toggleUser(user)}>{statusActionLabel(user)}</button>
+                        <button class="btn btn-text" disabled={!canResetPassword(user) || resetPasswordUserId === user.id} on:click={() => resetUserPassword(user)}>{resetPasswordUserId === user.id ? '重置中' : '重置密码'}</button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
             </div>
           </div>
-          <div class="panel"><div class="panel-head"><div><div class="panel-title">用户列表</div><div class="panel-subtitle">共 {users.length} 个账号</div></div></div><div class="panel-body table-wrap"><table class="table"><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>{#each users as user}<tr><td><div class="main-text">{user.display_name}</div><div class="sub-text">@{user.username}</div></td><td><span class="status blue">{isPrimaryAdmin(user) ? '主管理员' : user.role === 'admin' ? '子管理员' : '普通用户'}</span></td><td><span class={'status ' + (user.status === 'active' ? 'green' : 'red')}>{user.status === 'active' ? '启用' : '禁用'}</span></td><td>{user.points}</td><td>{user.created_at}</td><td>{user.last_login || '-'}</td><td><button class="btn btn-text" disabled={cannotChangeRole(user)} on:click={() => toggleUserRole(user)}>{roleActionLabel(user)}</button><button class="btn btn-text" disabled={cannotToggleStatus(user)} on:click={() => toggleUser(user)}>{statusActionLabel(user)}</button></td></tr>{/each}</tbody></table></div></div>
+        {/if}
+
+        {#if activeTab === 'password'}
+          <div class="panel password-panel">
+            <div class="panel-head"><div><div class="panel-title">密码安全</div><div class="panel-subtitle">修改当前登录管理员账号的密码。</div></div></div>
+            <div class="panel-body">
+              <form class="password-form" on:submit|preventDefault={changeAdminPassword}>
+                <div class="field password-field"><label for="admin-current-password">当前密码</label><input id="admin-current-password" type="password" bind:value={adminCurrentPassword} autocomplete="current-password" /></div>
+                <div class="field password-field"><label for="admin-new-password">新密码</label><input id="admin-new-password" type="password" bind:value={adminNewPassword} autocomplete="new-password" /></div>
+                <div class="field password-field"><label for="admin-confirm-password">确认新密码</label><input id="admin-confirm-password" type="password" bind:value={adminConfirmPassword} autocomplete="new-password" /></div>
+                <div class="panel-actions password-actions"><button class="btn btn-primary" disabled={adminPasswordSaving} type="submit">{adminPasswordSaving ? '正在保存...' : '修改密码'}</button></div>
+              </form>
+            </div>
+          </div>
         {/if}
 
         {#if activeTab === 'points'}
           <div class="admin-layout">
-            <div class="panel"><div class="panel-head"><div><div class="panel-title">调整积分</div><div class="panel-subtitle">正数为充值，负数为扣减。</div></div></div><div class="panel-body"><div class="field"><label for="admin-selected-user">选择用户</label><select id="admin-selected-user" bind:value={selectedUserId}>{#each users as user}<option value={user.id}>{user.display_name} / @{user.username} / {user.points}积分</option>{/each}</select></div><div class="field"><label for="admin-amount">调整积分</label><input id="admin-amount" type="number" bind:value={amount} /></div><div class="field"><label for="admin-reason">操作原因</label><input id="admin-reason" bind:value={reason} /></div><button class="btn btn-primary" style="width:100%;" on:click={adjustPoints}>提交调整</button></div></div>
-            <div class="panel"><div class="panel-head"><div><div class="panel-title">积分规则</div><div class="panel-subtitle">MVP 固定规则，后续可做平台配置。</div></div></div><div class="panel-body rule-grid"><div class="rule-card"><b>注册赠送</b><span>1000 积分</span></div><div class="rule-card"><b>智能生成短剧大纲</b><span>20 积分 / 次</span></div><div class="rule-card"><b>生成分镜</b><span>10 积分 / 次</span></div><div class="rule-card"><b>生成视频</b><span>10 积分 / 秒</span></div><div class="rule-card"><b>合成成片</b><span>30 积分 / 次</span></div></div></div>
+            <div class="panel">
+              <div class="panel-head"><div><div class="panel-title">调整积分</div><div class="panel-subtitle">正数为充值，负数为扣减。</div></div></div>
+              <div class="panel-body">
+                <div class="field"><label for="admin-selected-user">选择用户</label><select id="admin-selected-user" bind:value={selectedUserId}>{#each users as user}<option value={user.id}>{user.display_name} / @{user.username} / {user.points}积分</option>{/each}</select></div>
+                <div class="field"><label for="admin-amount">调整积分</label><input id="admin-amount" type="number" bind:value={amount} /></div>
+                <div class="field"><label for="admin-reason">操作原因</label><input id="admin-reason" bind:value={reason} /></div>
+                <button class="btn btn-primary" style="width:100%;" on:click={adjustPoints}>提交调整</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><div><div class="panel-title">积分规则</div><div class="panel-subtitle">MVP 固定规则，后续可做平台配置。</div></div></div>
+              <div class="panel-body rule-grid">
+                <div class="rule-card"><b>注册赠送</b><span>1000 积分</span></div>
+                <div class="rule-card"><b>智能生成短剧大纲</b><span>20 积分 / 次</span></div>
+                <div class="rule-card"><b>生成分镜</b><span>10 积分 / 次</span></div>
+                <div class="rule-card"><b>生成视频</b><span>10 积分 / 秒</span></div>
+                <div class="rule-card"><b>合成成片</b><span>30 积分 / 次</span></div>
+              </div>
+            </div>
           </div>
         {/if}
 
         {#if activeTab === 'ledger'}
-          <div class="panel"><div class="panel-head"><div><div class="panel-title">流水记录</div><div class="panel-subtitle">最近 {ledger.length} 条记录</div></div></div><div class="panel-body table-wrap"><table class="table"><thead><tr><th>时间</th><th>用户</th><th>场景</th><th>说明</th><th>类型</th><th>变动</th><th>余额</th></tr></thead><tbody>{#each ledger as row}<tr><td>{row.created_at}</td><td><div class="main-text">{row.display_name}</div><div class="sub-text">@{row.username}</div></td><td>{row.scene}</td><td>{row.description}</td><td>{row.type}</td><td><span class={row.amount >= 0 ? 'amount plus' : 'amount minus'}>{row.amount >= 0 ? '+' : ''}{row.amount}</span></td><td>{row.balance_after}</td></tr>{/each}</tbody></table></div></div>
+          <div class="panel">
+            <div class="panel-head"><div><div class="panel-title">流水记录</div><div class="panel-subtitle">最近 {ledger.length} 条记录</div></div></div>
+            <div class="panel-body table-wrap">
+              <table class="table">
+                <thead><tr><th>时间</th><th>用户</th><th>场景</th><th>说明</th><th>类型</th><th>变动</th><th>余额</th></tr></thead>
+                <tbody>
+                  {#each ledger as row}
+                    <tr><td>{row.created_at}</td><td><div class="main-text">{row.display_name}</div><div class="sub-text">@{row.username}</div></td><td>{row.scene}</td><td>{row.description}</td><td>{row.type}</td><td><span class={row.amount >= 0 ? 'amount plus' : 'amount minus'}>{row.amount >= 0 ? '+' : ''}{row.amount}</span></td><td>{row.balance_after}</td></tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
         {/if}
       {/if}
     </div>

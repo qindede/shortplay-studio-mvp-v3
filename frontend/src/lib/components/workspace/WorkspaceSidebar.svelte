@@ -1,6 +1,12 @@
 <script lang="ts">
   import type { Episode, Project, Usage, User } from '$lib/api';
   import { getStatusLabel, type PageKey } from '$lib/workspace/ui';
+  import Clapperboard from 'lucide-svelte/icons/clapperboard';
+  import FolderKanban from 'lucide-svelte/icons/folder-kanban';
+  import Images from 'lucide-svelte/icons/images';
+  import KeyRound from 'lucide-svelte/icons/key-round';
+  import LibraryBig from 'lucide-svelte/icons/library-big';
+  import WalletCards from 'lucide-svelte/icons/wallet-cards';
 
   export let activePage: PageKey;
   export let currentProject: Project | null = null;
@@ -15,12 +21,16 @@
   export let createProject: () => void | Promise<void>;
   export let logout: () => void;
 
-  const navItems: Array<{ key: PageKey; label: string; icon: string }> = [
-    { key: 'projects', label: '项目中心', icon: '01' },
-    { key: 'episodes', label: '剧集编排', icon: '02' },
-    { key: 'assets', label: '资产中心', icon: '03' },
-    { key: 'video', label: '视频中心', icon: '04' },
-    { key: 'account', label: '额度账户', icon: '05' }
+  const productionNavItems = [
+    { key: 'projects' as PageKey, label: '项目中心', icon: FolderKanban },
+    { key: 'episodes' as PageKey, label: '剧集编排', icon: LibraryBig },
+    { key: 'assets' as PageKey, label: '资产中心', icon: Images },
+    { key: 'video' as PageKey, label: '视频中心', icon: Clapperboard }
+  ];
+
+  const accountNavItems = [
+    { key: 'account' as PageKey, label: '额度账户', icon: WalletCards },
+    { key: 'password' as PageKey, label: '密码安全', icon: KeyRound }
   ];
 </script>
 
@@ -69,22 +79,26 @@
 
   <div class="nav">
     <div class="nav-section">制作动线</div>
-    {#each navItems.slice(0, 4) as item}
+    {#each productionNavItems as item}
+      {@const Icon = item.icon}
       <button class:active={activePage === item.key} class="nav-item" on:click={() => setPage(item.key)}>
-        <span class="nav-icon">{item.icon}</span>
+        <span class="nav-icon">
+          <Icon size={15} strokeWidth={2.3} />
+        </span>
         <span>{item.label}</span>
       </button>
     {/each}
 
     <div class="nav-section">账户</div>
-    <button class:active={activePage === 'account'} class="nav-item" on:click={() => setPage('account')}>
-      <span class="nav-icon">05</span>
-      <span>额度账户</span>
-    </button>
-    <button class:active={activePage === 'password'} class="nav-item" on:click={() => setPage('password')}>
-      <span class="nav-icon">06</span>
-      <span>密码安全</span>
-    </button>
+    {#each accountNavItems as item}
+      {@const Icon = item.icon}
+      <button class:active={activePage === item.key} class="nav-item" on:click={() => setPage(item.key)}>
+        <span class="nav-icon">
+          <Icon size={15} strokeWidth={2.3} />
+        </span>
+        <span>{item.label}</span>
+      </button>
+    {/each}
   </div>
 
   <div class="sidebar-footer">

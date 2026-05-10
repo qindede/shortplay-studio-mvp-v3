@@ -10,6 +10,7 @@ from ..store import snapshot, update
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 PRIMARY_ADMIN_ID = "user_admin"
 PRIMARY_ADMIN_USERNAME = "admin"
+DEFAULT_RESET_PASSWORD = "muran123"
 
 
 def is_primary_admin(user: dict) -> bool:
@@ -84,7 +85,7 @@ def admin_reset_user_password(user_id: str, payload: AdminPasswordReset, admin: 
             raise HTTPException(status_code=400, detail="请在账号设置中修改自己的密码")
         if is_primary_admin(target):
             raise HTTPException(status_code=400, detail="不能重置主管理员密码")
-        target["password_hash"] = hash_password(payload.password)
+        target["password_hash"] = hash_password(DEFAULT_RESET_PASSWORD)
         target["token"] = ""
         return {"user": public_user(target)}
 
