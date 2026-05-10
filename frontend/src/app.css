@@ -25,11 +25,39 @@
   --purple-soft: rgba(196, 181, 253, 0.14);
   --blue: #8bd3ff;
   --blue-soft: rgba(139, 211, 255, 0.14);
+  --scrollbar-size: 10px;
+  --scrollbar-track: rgba(244, 241, 234, 0.055);
+  --scrollbar-thumb: rgba(244, 241, 234, 0.24);
+  --scrollbar-thumb-hover: rgba(216, 255, 107, 0.56);
   --radius: 8px;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
 }
 
 * { box-sizing: border-box; }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
 html { background: var(--bg); }
 body {
   margin: 0;
@@ -226,6 +254,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   left: calc(100% + 12px);
   z-index: 60;
   width: 292px;
+  max-height: min(420px, calc(100vh - 36px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: grid;
   gap: 8px;
   padding: 10px;
