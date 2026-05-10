@@ -12,7 +12,8 @@
     { key: 'episodes', label: '剧集' },
     { key: 'assets', label: '素材' },
     { key: 'video', label: '成片' },
-    { key: 'account', label: '账户' }
+    { key: 'account', label: '账户' },
+    { key: 'password', label: '密码' }
   ];
 
   $: currentMeta = pageMeta[activePage];
@@ -39,7 +40,7 @@
       <button class="btn btn-secondary" on:click={refreshDashboard}>刷新额度</button>
     {/if}
 
-    {#if activePage !== 'account' && activePage !== 'script'}
+    {#if activePage !== 'account' && activePage !== 'password' && activePage !== 'script'}
       <button class="btn btn-primary" on:click={handleTopAction}>{currentMeta.actionLabel}</button>
     {/if}
   </div>

@@ -208,6 +208,8 @@ export const api = {
   login: (body: { username: string; password: string }) =>
     request<AuthResponse>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => request<User>('/api/me'),
+  changePassword: (body: { current_password: string; new_password: string }) =>
+    request<{ ok: boolean }>('/api/me/password', { method: 'PATCH', body: JSON.stringify(body) }),
   myLedger: () => request<PointLedger[]>('/api/me/point-ledger'),
 
   dashboard: () => request<Dashboard>('/api/dashboard'),
@@ -249,5 +251,7 @@ export const api = {
   adminAdjustPoints: (userId: string, body: { amount: number; reason: string }) =>
     request<{ entry: PointLedger; user: User }>(`/api/admin/users/${userId}/points`, { method: 'POST', body: JSON.stringify(body) }),
   adminUpdateUser: (userId: string, body: { role?: UserRole; status?: UserStatus }) =>
-    request<User>(`/api/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) })
+    request<User>(`/api/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  adminResetPassword: (userId: string, body: { password: string }) =>
+    request<{ user: User }>(`/api/admin/users/${userId}/password`, { method: 'PATCH', body: JSON.stringify(body) })
 };

@@ -81,6 +81,10 @@
       <span class="nav-icon">05</span>
       <span>额度账户</span>
     </button>
+    <button class:active={activePage === 'password'} class="nav-item" on:click={() => setPage('password')}>
+      <span class="nav-icon">06</span>
+      <span>密码安全</span>
+    </button>
   </div>
 
   <div class="sidebar-footer">

@@ -17,6 +17,13 @@
   let loading = true;
   let error = '';
   let message = '';
+  let adminCurrentPassword = '';
+  let adminNewPassword = '';
+  let adminConfirmPassword = '';
+  let adminPasswordSaving = false;
+  let resetUserId = '';
+  let resetNewPassword = '';
+  let resetPasswordSaving = false;
 
   onMount(load);
 
@@ -93,6 +100,65 @@
     }
   }
 
+  async function changeAdminPassword() {
+    error = '';
+    message = '';
+    if (!adminCurrentPassword || !adminNewPassword) {
+      error = '请输入当前密码和新密码';
+      return;
+    }
+    if (adminNewPassword.length < 6) {
+      error = '新密码至少 6 位';
+      return;
+    }
+    if (adminNewPassword !== adminConfirmPassword) {
+      error = '两次输入的新密码不一致';
+      return;
+    }
+
+    adminPasswordSaving = true;
+    try {
+      await api.changePassword({ current_password: adminCurrentPassword, new_password: adminNewPassword });
+      adminCurrentPassword = '';
+      adminNewPassword = '';
+      adminConfirmPassword = '';
+      message = '密码已更新';
+    } catch (err) {
+      error = err instanceof Error ? err.message : '修改失败';
+    } finally {
+      adminPasswordSaving = false;
+    }
+  }
+
+  async function resetUserPassword() {
+    error = '';
+    message = '';
+    const target = users.find((user) => user.id === resetUserId);
+    if (!target) {
+      error = '请选择需要重置密码的账号';
+      return;
+    }
+    if (!canResetPassword(target)) {
+      error = '不能在后台重置该账号密码';
+      return;
+    }
+    if (resetNewPassword.length < 6) {
+      error = '新密码至少 6 位';
+      return;
+    }
+
+    resetPasswordSaving = true;
+    try {
+      await api.adminResetPassword(target.id, { password: resetNewPassword });
+      resetNewPassword = '';
+      message = `已重置 ${target.display_name} 的密码`;
+    } catch (err) {
+      error = err instanceof Error ? err.message : '重置失败';
+    } finally {
+      resetPasswordSaving = false;
+    }
+  }
+
   function isSelf(user: User) {
     return currentUser?.id === user.id;
   }
@@ -130,6 +196,16 @@
     if (isSelf(user)) return '当前角色';
     if (user.role !== 'admin' && !isCurrentUserPrimaryAdmin()) return '仅主管理员';
     return user.role === 'admin' ? '设为用户' : '设为管理员';
+  }
+
+  function canResetPassword(user: User) {
+    return !isSelf(user) && !isPrimaryAdmin(user);
+  }
+
+  $: resettableUsers = users.filter(canResetPassword);
+  $: if (!resetUserId && resettableUsers.length > 0) resetUserId = resettableUsers[0].id;
+  $: if (resetUserId && !resettableUsers.some((user) => user.id === resetUserId)) {
+    resetUserId = resettableUsers[0]?.id || '';
   }
 
   function logout() {
@@ -197,6 +273,25 @@
         {/if}
 
         {#if activeTab === 'users'}
+          <div class="admin-layout">
+            <div class="panel">
+              <div class="panel-head"><div><div class="panel-title">修改当前密码</div><div class="panel-subtitle">更新当前登录管理员账号的密码。</div></div></div>
+              <div class="panel-body">
+                <div class="field"><label for="admin-current-password">当前密码</label><input id="admin-current-password" type="password" bind:value={adminCurrentPassword} autocomplete="current-password" /></div>
+                <div class="field"><label for="admin-new-password">新密码</label><input id="admin-new-password" type="password" bind:value={adminNewPassword} autocomplete="new-password" /></div>
+                <div class="field"><label for="admin-confirm-password">确认新密码</label><input id="admin-confirm-password" type="password" bind:value={adminConfirmPassword} autocomplete="new-password" /></div>
+                <button class="btn btn-primary" style="width:100%;" disabled={adminPasswordSaving} on:click={changeAdminPassword}>{adminPasswordSaving ? '正在保存...' : '更新密码'}</button>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><div><div class="panel-title">重置用户密码</div><div class="panel-subtitle">为普通用户或子管理员设置新密码。</div></div></div>
+              <div class="panel-body">
+                <div class="field"><label for="admin-reset-user">选择账号</label><select id="admin-reset-user" bind:value={resetUserId} disabled={resettableUsers.length === 0}>{#each resettableUsers as user}<option value={user.id}>{user.display_name} / @{user.username}</option>{/each}</select></div>
+                <div class="field"><label for="admin-reset-password">新密码</label><input id="admin-reset-password" type="password" bind:value={resetNewPassword} autocomplete="new-password" /></div>
+                <button class="btn btn-primary" style="width:100%;" disabled={resetPasswordSaving || resettableUsers.length === 0} on:click={resetUserPassword}>{resetPasswordSaving ? '正在重置...' : '重置密码'}</button>
+              </div>
+            </div>
+          </div>
           <div class="panel"><div class="panel-head"><div><div class="panel-title">用户列表</div><div class="panel-subtitle">共 {users.length} 个账号</div></div></div><div class="panel-body table-wrap"><table class="table"><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>积分</th><th>注册时间</th><th>最近登录</th><th>操作</th></tr></thead><tbody>{#each users as user}<tr><td><div class="main-text">{user.display_name}</div><div class="sub-text">@{user.username}</div></td><td><span class="status blue">{isPrimaryAdmin(user) ? '主管理员' : user.role === 'admin' ? '子管理员' : '普通用户'}</span></td><td><span class={'status ' + (user.status === 'active' ? 'green' : 'red')}>{user.status === 'active' ? '启用' : '禁用'}</span></td><td>{user.points}</td><td>{user.created_at}</td><td>{user.last_login || '-'}</td><td><button class="btn btn-text" disabled={cannotChangeRole(user)} on:click={() => toggleUserRole(user)}>{roleActionLabel(user)}</button><button class="btn btn-text" disabled={cannotToggleStatus(user)} on:click={() => toggleUser(user)}>{statusActionLabel(user)}</button></td></tr>{/each}</tbody></table></div></div>
         {/if}
 

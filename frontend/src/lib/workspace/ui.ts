@@ -1,7 +1,7 @@
 import type { Status } from '$lib/api';
 
 export type AuthMode = 'login' | 'register';
-export type PageKey = 'projects' | 'episodes' | 'script' | 'assets' | 'video' | 'account';
+export type PageKey = 'projects' | 'episodes' | 'script' | 'assets' | 'video' | 'account' | 'password';
 
 interface PageMeta {
   title: string;
@@ -39,6 +39,11 @@ export const pageMeta: Record<PageKey, PageMeta> = {
     title: '额度与账户',
     description: '查看积分、生成额度和最近的消耗流水',
     actionLabel: '购买额度'
+  },
+  password: {
+    title: '密码安全',
+    description: '更新当前账号的登录密码',
+    actionLabel: '更新密码'
   }
 };
 

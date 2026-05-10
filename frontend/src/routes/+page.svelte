@@ -26,6 +26,7 @@
   import AccountPage from '$lib/components/workspace/pages/AccountPage.svelte';
   import AssetsPage from '$lib/components/workspace/pages/AssetsPage.svelte';
   import EpisodesPage from '$lib/components/workspace/pages/EpisodesPage.svelte';
+  import PasswordPage from '$lib/components/workspace/pages/PasswordPage.svelte';
   import ProjectsPage from '$lib/components/workspace/pages/ProjectsPage.svelte';
   import ScriptPage from '$lib/components/workspace/pages/ScriptPage.svelte';
   import VideoPage from '$lib/components/workspace/pages/VideoPage.svelte';
@@ -770,6 +771,10 @@
 
           {#if activePage === 'account'}
             <AccountPage {currentUser} {usage} {pointBalance} {pointLedger} />
+          {/if}
+
+          {#if activePage === 'password'}
+            <PasswordPage />
           {/if}
         {/if}
       </div>

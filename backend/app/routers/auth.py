@@ -4,7 +4,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..schemas import LoginRequest, RegisterRequest
+from ..schemas import ChangePasswordRequest, LoginRequest, RegisterRequest
 from ..security import get_current_user, hash_password, public_user
 from ..services import change_points
 from ..store import now, snapshot, uid, update
@@ -62,6 +62,20 @@ def login(payload: LoginRequest):
 @router.get("/me")
 def me(user: dict = Depends(get_current_user)):
     return user
+
+
+@router.patch("/me/password")
+def change_my_password(payload: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        target = next((u for u in data.get("users", []) if u["id"] == user["id"]), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        if target.get("password_hash") != hash_password(payload.current_password):
+            raise HTTPException(status_code=400, detail="当前密码不正确")
+        target["password_hash"] = hash_password(payload.new_password)
+        return {"ok": True}
+
+    return update(mutate)
 
 
 @router.get("/me/point-ledger")

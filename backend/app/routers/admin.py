@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..schemas import AdminPointAdjust, AdminUserUpdate
-from ..security import public_user, require_admin
+from ..schemas import AdminPasswordReset, AdminPointAdjust, AdminUserUpdate
+from ..security import hash_password, public_user, require_admin
 from ..services import change_points, user_in_data
 from ..store import snapshot, update
 
@@ -72,6 +72,21 @@ def admin_adjust_points(user_id: str, payload: AdminPointAdjust, admin: dict = D
     def mutate(data):
         entry = change_points(data, user_id, payload.amount, "admin_adjust", "管理员调整", payload.reason)
         return {"entry": entry, "user": public_user(user_in_data(data, user_id))}
+
+    return update(mutate)
+
+
+@router.patch("/users/{user_id}/password")
+def admin_reset_user_password(user_id: str, payload: AdminPasswordReset, admin: dict = Depends(require_admin)):
+    def mutate(data):
+        target = user_in_data(data, user_id)
+        if target["id"] == admin["id"]:
+            raise HTTPException(status_code=400, detail="请在账号设置中修改自己的密码")
+        if is_primary_admin(target):
+            raise HTTPException(status_code=400, detail="不能重置主管理员密码")
+        target["password_hash"] = hash_password(payload.password)
+        target["token"] = ""
+        return {"user": public_user(target)}
 
     return update(mutate)
 
