@@ -571,7 +571,7 @@
       <div class="modal-panel project-create-modal" role="dialog" aria-modal="true" aria-labelledby="project-create-title">
         <div class="modal-head">
           <div>
-            <div class="panel-title" id="project-create-title">新建短剧项目</div>
+            <div class="modal-title-accent" id="project-create-title">新建短剧项目</div>
             <div class="panel-subtitle">填写短剧名称和简介，可先生成剧集大纲，确认后再创建项目。</div>
           </div>
           <button class="modal-close" aria-label="关闭" on:click={closeProjectDialog}>×</button>
