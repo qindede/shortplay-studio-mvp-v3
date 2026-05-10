@@ -11,6 +11,7 @@
     type Episode,
     type PointLedger,
     type Project,
+    type ProjectOutlineEpisode,
     type Shot,
     type Usage,
     type User,
@@ -58,6 +59,15 @@
   let episodeSummary = '';
   let episodeScript = '';
   let episodeDuration = 30;
+  let projectDialogOpen = false;
+  let projectName = '';
+  let projectDescription = '';
+  let outlineEpisodeCount = 6;
+  let outlineCost = 20;
+  let outlineEpisodes: ProjectOutlineEpisode[] = [];
+  let outlineLoading = false;
+  let projectSubmitting = false;
+  let projectFormError = '';
 
   const assetTypes: Asset['type'][] = ['character', 'scene', 'image', 'audio'];
 
@@ -72,6 +82,35 @@
     episodeSummary = '';
     episodeScript = '';
     episodeDuration = 30;
+  }
+
+  function resetProjectForm() {
+    projectName = '';
+    projectDescription = '';
+    outlineEpisodeCount = 6;
+    outlineEpisodes = [];
+    outlineLoading = false;
+    projectSubmitting = false;
+    projectFormError = '';
+  }
+
+  function openProjectDialog() {
+    resetProjectForm();
+    projectDialogOpen = true;
+  }
+
+  function closeProjectDialog() {
+    if (outlineLoading || projectSubmitting) return;
+    projectDialogOpen = false;
+    resetProjectForm();
+  }
+
+  function updateOutlineEpisode(index: number, key: keyof ProjectOutlineEpisode, value: string | number) {
+    outlineEpisodes = outlineEpisodes.map((episode, currentIndex) =>
+      currentIndex === index
+        ? { ...episode, [key]: value, script: key === 'summary' ? String(value) : episode.script }
+        : episode
+    );
   }
 
   function fillEpisodeForm(episode: Episode) {
@@ -96,6 +135,8 @@
     assetType = 'all';
     projectPickerOpen = false;
     activePage = 'projects';
+    projectDialogOpen = false;
+    resetProjectForm();
     resetEpisodeForm();
   }
 
@@ -285,17 +326,67 @@
     if (activePage === 'video') return composeVideo();
   }
 
-  async function createProject() {
-    await safeRun(async () => {
-      const name = prompt('项目名称', '新短剧项目');
-      if (!name) return;
+  function createProject() {
+    openProjectDialog();
+  }
 
-      const description = prompt('项目简介', '请输入项目简介') || '';
-      const project = await api.createProject({ name, description, owner: currentUser?.display_name || '当前用户' });
+  async function generateProjectOutline() {
+    const name = projectName.trim();
+    const description = projectDescription.trim();
+    projectFormError = '';
+    error = '';
+
+    if (!name || !description) {
+      projectFormError = '请先填写短剧名称和简介，再生成短剧大纲。';
+      return;
+    }
+
+    outlineLoading = true;
+    try {
+      const outline = await api.generateProjectOutline({
+        name,
+        description,
+        episode_count: Number(outlineEpisodeCount)
+      });
+      outlineCost = outline.cost;
+      outlineEpisodes = outline.episodes;
+      await refreshDashboard();
+    } catch (err) {
+      projectFormError = err instanceof Error ? err.message : '生成短剧大纲失败';
+    } finally {
+      outlineLoading = false;
+    }
+  }
+
+  async function submitProject() {
+    const name = projectName.trim();
+    const description = projectDescription.trim();
+    projectFormError = '';
+    error = '';
+
+    if (!name || !description) {
+      projectFormError = '请填写短剧名称和简介。';
+      return;
+    }
+
+    projectSubmitting = true;
+    try {
+      const project = await api.createProject({
+        name,
+        description,
+        owner: currentUser?.display_name || '当前用户',
+        episodes: outlineEpisodes
+      });
+      projectDialogOpen = false;
+      resetProjectForm();
       await refreshDashboard();
       const target = projects.find((item) => item.id === project.id) || project;
       await selectProject(target);
-    });
+    } catch (err) {
+      projectFormError = err instanceof Error ? err.message : '创建项目失败';
+    } finally {
+      projectSubmitting = false;
+    }
   }
 
   async function createEpisode() {
@@ -474,4 +565,100 @@
       </div>
     </main>
   </div>
+
+  {#if projectDialogOpen}
+    <div class="modal-backdrop" role="presentation">
+      <div class="modal-panel project-create-modal" role="dialog" aria-modal="true" aria-labelledby="project-create-title">
+        <div class="modal-head">
+          <div>
+            <div class="panel-title" id="project-create-title">新建短剧项目</div>
+            <div class="panel-subtitle">填写短剧名称和简介，可先生成剧集大纲，确认后再创建项目。</div>
+          </div>
+          <button class="modal-close" aria-label="关闭" on:click={closeProjectDialog}>×</button>
+        </div>
+
+        <div class="modal-body">
+          {#if projectFormError}<div class="error compact-alert">{projectFormError}</div>{/if}
+
+          <div class="field-grid">
+            <div class="field">
+              <label for="project-name">短剧名称</label>
+              <input id="project-name" bind:value={projectName} placeholder="例如：错爱重生：她从婚礼现场逆袭" />
+            </div>
+            <div class="field">
+              <label for="outline-count">剧集数量</label>
+              <input id="outline-count" type="number" min="3" max="24" bind:value={outlineEpisodeCount} />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="project-description">短剧简介</label>
+            <textarea
+              id="project-description"
+              class="project-description-input"
+              bind:value={projectDescription}
+              placeholder="写清主角、核心冲突、爽点或反转。"
+            ></textarea>
+          </div>
+
+          <div class="outline-toolbar">
+            <div>
+              <b>智能生成短剧大纲</b>
+              <span>生成后会扣除积分，确认创建时会同步创建对应剧集。</span>
+            </div>
+            <button
+              class="btn btn-secondary"
+              disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}
+              on:click={generateProjectOutline}
+            >
+              {outlineLoading ? '生成中...' : `智能生成短剧大纲 · 扣 ${outlineCost} 积分`}
+            </button>
+          </div>
+
+          {#if pointBalance < outlineCost}
+            <div class="inline-hint warn">当前积分 {pointBalance}，不足以生成短剧大纲。</div>
+          {/if}
+
+          {#if outlineEpisodes.length > 0}
+            <div class="outline-preview">
+              <div class="outline-preview-head">
+                <div>
+                  <div class="panel-title">剧集目录预览</div>
+                  <div class="panel-subtitle">可在确认创建前微调每集标题和简介。</div>
+                </div>
+                <span class="status blue">{outlineEpisodes.length} 集</span>
+              </div>
+
+              <div class="outline-list">
+                {#each outlineEpisodes as episode, index}
+                  <div class="outline-item">
+                    <div class="episode-no">{String(index + 1).padStart(2, '0')}</div>
+                    <div class="outline-item-body">
+                      <input
+                        aria-label={`第${index + 1}集标题`}
+                        value={episode.title}
+                        on:input={(event) => updateOutlineEpisode(index, 'title', event.currentTarget.value)}
+                      />
+                      <textarea
+                        aria-label={`第${index + 1}集简介`}
+                        value={episode.summary}
+                        on:input={(event) => updateOutlineEpisode(index, 'summary', event.currentTarget.value)}
+                      ></textarea>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" disabled={outlineLoading || projectSubmitting} on:click={closeProjectDialog}>取消</button>
+          <button class="btn btn-primary" disabled={outlineLoading || projectSubmitting} on:click={submitProject}>
+            {projectSubmitting ? '创建中...' : outlineEpisodes.length > 0 ? `确认创建项目和 ${outlineEpisodes.length} 集` : '确认创建项目'}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 {/if}

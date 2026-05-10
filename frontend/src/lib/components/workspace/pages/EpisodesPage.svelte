@@ -14,6 +14,7 @@
         <div class="panel-title">剧集目录</div>
         <div class="panel-subtitle">共 {episodes.length} 集。选择一集进入脚本分镜。</div>
       </div>
+      <button class="btn btn-primary" on:click={createEpisode}>新增剧集</button>
     </div>
 
     <div class="panel-body table-wrap">

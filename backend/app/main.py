@@ -24,6 +24,7 @@ app.add_middleware(
 AUTH_SECRET = os.getenv("SHORTPLAY_AUTH_SECRET", "shortplay-mvp-secret")
 
 POINT_RULES = {
+    "outline": 20,
     "storyboard": 10,
     "video_second": 10,
     "image_asset": 20,
@@ -43,10 +44,29 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class EpisodeDraft(BaseModel):
+    title: str = Field(min_length=1)
+    summary: str = ""
+    script: str = ""
+    duration_target: int = Field(default=30, ge=5, le=300)
+
+
+class OutlineGenerateRequest(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    episode_count: int = Field(default=6, ge=3, le=24)
+
+
+class OutlineGenerateResponse(BaseModel):
+    cost: int
+    episodes: list[EpisodeDraft]
+
+
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
     owner: str = "未分配"
+    episodes: list[EpisodeDraft] = Field(default_factory=list)
 
 
 class EpisodeCreate(BaseModel):
@@ -307,7 +327,60 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
             "updated_at": now(),
         }
         data["projects"].insert(0, project)
+        for index, item in enumerate(payload.episodes, start=1):
+            data["episodes"].append(
+                {
+                    "id": uid("ep"),
+                    "project_id": project["id"],
+                    "no": index,
+                    "title": item.title,
+                    "summary": item.summary,
+                    "script": item.script or item.summary,
+                    "duration_target": item.duration_target,
+                    "status": "draft",
+                    "updated_at": now(),
+                }
+            )
         return enrich_project(data, project)
+
+    return update(mutate)
+
+
+def build_project_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]:
+    name = payload.name.strip()
+    description = payload.description.strip()
+    beats = [
+        ("强钩子开场", "用最强冲突打开故事，主角被迫进入无法回头的局面。"),
+        ("误会升级", "核心人物互相试探，隐藏身份或关键秘密被第一次触碰。"),
+        ("反派施压", "对手主动出击，主角的目标、尊严或关系受到明显威胁。"),
+        ("关键反转", "主角拿到新线索，局势从被动挨打转向主动布局。"),
+        ("情感裂痕", "最重要的关系出现误解，短剧的情绪张力被推高。"),
+        ("证据浮出", "真相碎片被串联起来，观众看到下一轮爆点的入口。"),
+        ("当众打脸", "主角在公开场合完成一次强反击，爽点集中释放。"),
+        ("身份揭露", "核心身份或幕后关系被揭开，人物站位发生变化。"),
+        ("终局逼近", "反派孤注一掷，主角必须在有限时间内做选择。"),
+        ("高潮收束", "主角完成最终反转，并给下一季或番外留下余味。"),
+    ]
+    episodes: list[EpisodeDraft] = []
+    for index in range(payload.episode_count):
+        beat_title, beat_summary = beats[index % len(beats)]
+        title = f"第{index + 1:02d}集 {beat_title}"
+        summary = f"{description} 本集聚焦“{beat_title}”：{beat_summary}"
+        script = (
+            f"项目《{name}》第{index + 1}集。"
+            f"剧情摘要：{summary} "
+            "建议用开场三秒冲突、人物对峙、结尾悬念组织脚本。"
+        )
+        episodes.append(EpisodeDraft(title=title, summary=summary, script=script, duration_target=30))
+    return episodes
+
+
+@app.post("/api/projects/generate-outline", response_model=OutlineGenerateResponse)
+def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        cost = POINT_RULES["outline"]
+        change_points(data, user["id"], -cost, "consume", "生成短剧大纲", f"智能生成《{payload.name}》短剧大纲")
+        return {"cost": cost, "episodes": build_project_outline(payload)}
 
     return update(mutate)
 

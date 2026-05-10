@@ -30,6 +30,7 @@
 
     <div class="panel-body rule-grid">
       <div class="rule-card"><b>生成 / 更新分镜</b><span>10 积分 / 次</span></div>
+      <div class="rule-card"><b>智能生成短剧大纲</b><span>20 积分 / 次</span></div>
       <div class="rule-card"><b>生成视频</b><span>10 积分 / 秒</span></div>
       <div class="rule-card"><b>创建视觉素材</b><span>20 积分 / 个</span></div>
       <div class="rule-card"><b>合成成片</b><span>30 积分 / 次</span></div>

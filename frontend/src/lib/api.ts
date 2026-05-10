@@ -134,6 +134,18 @@ export interface Episode {
   version_count: number;
 }
 
+export interface ProjectOutlineEpisode {
+  title: string;
+  summary: string;
+  script: string;
+  duration_target: number;
+}
+
+export interface ProjectOutline {
+  cost: number;
+  episodes: ProjectOutlineEpisode[];
+}
+
 export interface Shot {
   id: string;
   episode_id: string;
@@ -193,8 +205,10 @@ export const api = {
 
   dashboard: () => request<Dashboard>('/api/dashboard'),
   projects: () => request<Project[]>('/api/projects'),
-  createProject: (body: { name: string; description: string; owner?: string }) =>
+  createProject: (body: { name: string; description: string; owner?: string; episodes?: ProjectOutlineEpisode[] }) =>
     request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
+  generateProjectOutline: (body: { name: string; description: string; episode_count?: number }) =>
+    request<ProjectOutline>('/api/projects/generate-outline', { method: 'POST', body: JSON.stringify(body) }),
   episodes: (projectId: string) => request<Episode[]>(`/api/projects/${projectId}/episodes`),
   createEpisode: (projectId: string, body: { title: string; summary: string; script: string; duration_target: number }) =>
     request<Episode>(`/api/projects/${projectId}/episodes`, { method: 'POST', body: JSON.stringify(body) }),
