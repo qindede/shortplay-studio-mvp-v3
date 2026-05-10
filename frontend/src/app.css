@@ -483,6 +483,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--accent-2);
   color: #06110f;
 }
+.btn-outline-generate {
+  min-width: 218px;
+  background:
+    linear-gradient(180deg, rgba(216, 255, 107, 0.24), rgba(216, 255, 107, 0.12)),
+    rgba(216, 255, 107, 0.08);
+  border: 1px solid rgba(216, 255, 107, 0.58);
+  color: var(--accent);
+  box-shadow: 0 16px 36px rgba(216, 255, 107, 0.16), inset 0 1px 0 rgba(255,255,255,0.12);
+}
+.btn-outline-generate:hover {
+  background:
+    linear-gradient(180deg, rgba(216, 255, 107, 0.34), rgba(216, 255, 107, 0.16)),
+    rgba(216, 255, 107, 0.1);
+  border-color: rgba(216, 255, 107, 0.76);
+  color: var(--text);
+  transform: translateY(-1px);
+}
 .btn-text {
   height: 30px;
   padding: 0 9px;
@@ -1349,7 +1366,7 @@ textarea {
   backdrop-filter: blur(16px);
 }
 .modal-panel {
-  width: min(920px, 100%);
+  width: min(720px, 100%);
   max-height: min(860px, calc(100vh - 44px));
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1373,6 +1390,15 @@ textarea {
   border-top: 1px solid var(--line);
   border-bottom: 0;
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.modal-actions-split {
+  justify-content: space-between;
+}
+.modal-action-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .modal-close {
@@ -1569,6 +1595,13 @@ textarea {
   .outline-preview-head {
     align-items: stretch;
     flex-direction: column;
+  }
+  .modal-action-right {
+    width: 100%;
+  }
+  .modal-action-right .btn,
+  .modal-actions-split > .btn {
+    flex: 1 1 auto;
   }
   .modal-close { align-self: flex-end; }
   .outline-toolbar .btn { width: 100%; }

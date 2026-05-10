@@ -62,7 +62,6 @@
   let projectDialogOpen = false;
   let projectName = '';
   let projectDescription = '';
-  let outlineEpisodeCount = 6;
   let outlineCost = 20;
   let outlineEpisodes: ProjectOutlineEpisode[] = [];
   let outlineLoading = false;
@@ -87,7 +86,6 @@
   function resetProjectForm() {
     projectName = '';
     projectDescription = '';
-    outlineEpisodeCount = 6;
     outlineEpisodes = [];
     outlineLoading = false;
     projectSubmitting = false;
@@ -345,8 +343,7 @@
     try {
       const outline = await api.generateProjectOutline({
         name,
-        description,
-        episode_count: Number(outlineEpisodeCount)
+        description
       });
       outlineCost = outline.cost;
       outlineEpisodes = outline.episodes;
@@ -580,15 +577,9 @@
         <div class="modal-body">
           {#if projectFormError}<div class="error compact-alert">{projectFormError}</div>{/if}
 
-          <div class="field-grid">
-            <div class="field">
-              <label for="project-name">短剧名称</label>
-              <input id="project-name" bind:value={projectName} placeholder="例如：错爱重生：她从婚礼现场逆袭" />
-            </div>
-            <div class="field">
-              <label for="outline-count">剧集数量</label>
-              <input id="outline-count" type="number" min="3" max="24" bind:value={outlineEpisodeCount} />
-            </div>
+          <div class="field">
+            <label for="project-name">短剧名称</label>
+            <input id="project-name" bind:value={projectName} placeholder="例如：错爱重生：她从婚礼现场逆袭" />
           </div>
 
           <div class="field">
@@ -599,20 +590,6 @@
               bind:value={projectDescription}
               placeholder="写清主角、核心冲突、爽点或反转。"
             ></textarea>
-          </div>
-
-          <div class="outline-toolbar">
-            <div>
-              <b>智能生成短剧大纲</b>
-              <span>生成后会扣除积分，确认创建时会同步创建对应剧集。</span>
-            </div>
-            <button
-              class="btn btn-secondary"
-              disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}
-              on:click={generateProjectOutline}
-            >
-              {outlineLoading ? '生成中...' : `智能生成短剧大纲 · 扣 ${outlineCost} 积分`}
-            </button>
           </div>
 
           {#if pointBalance < outlineCost}
@@ -652,11 +629,21 @@
           {/if}
         </div>
 
-        <div class="modal-actions">
-          <button class="btn btn-secondary" disabled={outlineLoading || projectSubmitting} on:click={closeProjectDialog}>取消</button>
-          <button class="btn btn-primary" disabled={outlineLoading || projectSubmitting} on:click={submitProject}>
-            {projectSubmitting ? '创建中...' : outlineEpisodes.length > 0 ? `确认创建项目和 ${outlineEpisodes.length} 集` : '确认创建项目'}
+        <div class="modal-actions modal-actions-split">
+          <button
+            class="btn btn-outline-generate"
+            disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}
+            on:click={generateProjectOutline}
+          >
+            {outlineLoading ? '生成中...' : `✨智能生成大纲（ ${outlineCost} 积分 ）`}
           </button>
+
+          <div class="modal-action-right">
+            <button class="btn btn-secondary" disabled={outlineLoading || projectSubmitting} on:click={closeProjectDialog}>取消</button>
+            <button class="btn btn-primary" disabled={outlineLoading || projectSubmitting} on:click={submitProject}>
+              {projectSubmitting ? '创建中...' : outlineEpisodes.length > 0 ? `确认创建项目和 ${outlineEpisodes.length} 集` : '确认创建项目'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
