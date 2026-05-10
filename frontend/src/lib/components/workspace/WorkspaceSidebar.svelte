@@ -35,10 +35,12 @@
 
 <aside class="sidebar">
   <div class="brand">
-    <div class="brand-mark">SP</div>
+    <div class="brand-mark" aria-hidden="true">
+      <span class="brand-flame"></span>
+    </div>
     <div>
-      <div class="brand-title">剧灵</div>
-      <div class="brand-subtitle">短剧内容创作舱</div>
+      <div class="brand-title">幕燃</div>
+      <div class="brand-subtitle">MURAN · 短剧内容创作台</div>
     </div>
   </div>
 

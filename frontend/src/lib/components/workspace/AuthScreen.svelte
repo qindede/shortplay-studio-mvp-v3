@@ -27,18 +27,27 @@
       <div class="poster-frame frame-a"></div>
       <div class="poster-frame frame-b"></div>
       <div class="poster-frame frame-c"></div>
+      <div class="auth-logo-lockup" aria-hidden="true">
+        <div class="auth-logo-mark">
+          <span class="brand-flame"></span>
+        </div>
+        <div class="auth-logo-cn">幕 燃</div>
+        <div class="auth-logo-en">MURAN</div>
+      </div>
       <div class="auth-headline">
-        <span>AI Short Drama Lab</span>
+        <span>MURAN Studio</span>
         <h1>让每个创意，燃成一幕好戏</h1>
       </div>
     </div>
 
     <div class="auth-card">
       <div class="auth-brand">
-        <div class="brand-mark">SP</div>
+        <div class="brand-mark" aria-hidden="true">
+          <span class="brand-flame"></span>
+        </div>
         <div>
-          <div class="brand-title">剧灵</div>
-          <div class="brand-subtitle">短剧内容创作舱</div>
+          <div class="brand-title">幕燃</div>
+          <div class="brand-subtitle">MURAN · 短剧内容创作台</div>
         </div>
       </div>
 
