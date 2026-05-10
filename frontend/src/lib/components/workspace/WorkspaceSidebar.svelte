@@ -87,7 +87,7 @@
     <div class="usage-card usage-card-user">
       <div class="usage-user-head">
         <div class="switcher-label">创作者</div>
-        <button class="btn usage-user-exit" on:click={logout}>退出</button>
+        <button class="usage-user-exit" on:click={logout}>退出</button>
       </div>
 
       <div class="sidebar-user-row">

@@ -155,7 +155,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .switcher-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -350,6 +350,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   display: grid;
   gap: 12px;
 }
+.usage-card-user {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.085), rgba(255,255,255,0.052)),
+    rgba(255,255,255,0.045);
+}
+.usage-card-user .usage-user-head {
+  align-items: center;
+  margin-bottom: 10px;
+}
 .usage-card {
   color: var(--text);
   padding: 14px;
@@ -372,14 +381,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .usage-row strong,
 .export-row b { color: var(--text); }
 .usage-user-exit {
-  height: auto;
-  padding: 0;
   border-radius: 0;
   background: transparent;
   color: var(--muted);
   box-shadow: none;
+  font-size: 12px;
+  font-weight: 850;
 }
-.usage-user-exit:hover { color: var(--text); }
+.usage-user-exit:hover {
+  color: var(--red);
+}
 .usage-divider {
   height: 1px;
   margin: 14px 0 12px;
@@ -390,6 +401,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.usage-card-user .sidebar-user-row {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(9, 10, 15, 0.32);
 }
 .sidebar-user-avatar {
   width: 38px;
