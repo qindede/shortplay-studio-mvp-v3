@@ -29,7 +29,7 @@
       <div class="poster-frame frame-c"></div>
       <div class="auth-headline">
         <span>AI Short Drama Lab</span>
-        <h1>把爆款短剧，从一句梗概推进到可导出的竖屏成片。</h1>
+        <h1>让每个创意，燃成一幕好戏</h1>
       </div>
     </div>
 

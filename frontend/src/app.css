@@ -1457,9 +1457,9 @@ textarea {
   background: rgba(255,255,255,0.22);
   box-shadow: 0 18px 0 rgba(255,255,255,0.1);
 }
-.frame-a { right: 86px; top: 70px; transform: rotate(4deg); }
-.frame-b { right: 210px; top: 160px; transform: rotate(-8deg); background: rgba(85,214,194,0.16); }
-.frame-c { right: 30px; top: 250px; transform: rotate(9deg); background: rgba(216,255,107,0.14); }
+.frame-a { right: 86px; top: 40px; transform: rotate(4deg); }
+.frame-b { right: 210px; top: 130px; transform: rotate(-8deg); background: rgba(85,214,194,0.16); }
+.frame-c { right: 30px; top: 220px; transform: rotate(9deg); background: rgba(216,255,107,0.14); }
 .auth-headline {
   position: absolute;
   left: 34px;
