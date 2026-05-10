@@ -1411,7 +1411,7 @@ textarea {
   align-items: stretch;
 }
 .auth-poster {
-  min-height: 620px;
+  min-height: 0;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   background: var(--surface);
@@ -1494,7 +1494,7 @@ textarea {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 30px;
-  align-self: center;
+  align-self: stretch;
   backdrop-filter: blur(18px);
 }
 .auth-brand {
@@ -1538,16 +1538,6 @@ textarea {
   width: 100%;
   margin-top: 4px;
 }
-.auth-hint {
-  margin-top: 16px;
-  border-radius: var(--radius);
-  background: rgba(255,255,255,0.055);
-  border: 1px solid var(--line);
-  color: var(--text-soft);
-  line-height: 1.7;
-  padding: 12px;
-}
-
 .user-pill {
   height: 40px;
   display: flex;

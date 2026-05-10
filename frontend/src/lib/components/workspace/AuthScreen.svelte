@@ -2,17 +2,16 @@
   import type { AuthMode } from '$lib/workspace/ui';
 
   export let authMode: AuthMode = 'login';
-  export let authUsername = 'demo';
-  export let authPassword = 'demo123';
-  export let authDisplayName = '';
+  export let authUsername = '';
+  export let authPassword = '';
   export let error = '';
   export let loading = false;
   export let submitAuth: () => void | Promise<void>;
 
   function switchToLogin() {
     authMode = 'login';
-    authUsername = 'demo';
-    authPassword = 'demo123';
+    authUsername = '';
+    authPassword = '';
   }
 
   function switchToRegister() {
@@ -59,13 +58,6 @@
         <input id="auth-username" bind:value={authUsername} placeholder="请输入用户名" />
       </div>
 
-      {#if authMode === 'register'}
-        <div class="field">
-          <label for="auth-display-name">显示名称</label>
-          <input id="auth-display-name" bind:value={authDisplayName} placeholder="用于项目协作中的展示名称" />
-        </div>
-      {/if}
-
       <div class="field">
         <label for="auth-password">密码</label>
         <input id="auth-password" type="password" bind:value={authPassword} placeholder="至少 6 位" on:keydown={(event) => event.key === 'Enter' && submitAuth()} />
@@ -74,11 +66,6 @@
       <button class="btn btn-primary auth-submit" on:click={submitAuth}>
         {authMode === 'login' ? '登录工作室' : '注册并进入'}
       </button>
-
-      <div class="auth-hint">
-        <b>演示账号：</b> demo / demo123<br />
-        <b>管理员：</b> admin / admin123
-      </div>
     </div>
   </div>
 </div>

@@ -47,9 +47,8 @@
 
   let currentUser: User | null = null;
   let authMode: AuthMode = 'login';
-  let authUsername = 'demo';
-  let authPassword = 'demo123';
-  let authDisplayName = '';
+  let authUsername = '';
+  let authPassword = '';
   let pointLedger: PointLedger[] = [];
 
   let dashboard: Dashboard | null = null;
@@ -232,7 +231,7 @@
       const payload =
         authMode === 'login'
           ? await api.login({ username: authUsername, password: authPassword })
-          : await api.register({ username: authUsername, password: authPassword, display_name: authDisplayName });
+          : await api.register({ username: authUsername, password: authPassword, display_name: authUsername });
 
       setAuthToken(payload.token);
       currentUser = payload.user;
@@ -251,9 +250,8 @@
     currentUser = null;
     error = '';
     authMode = 'login';
-    authUsername = 'demo';
-    authPassword = 'demo123';
-    authDisplayName = '';
+    authUsername = '';
+    authPassword = '';
     resetWorkspaceState();
   }
 
@@ -704,7 +702,6 @@
     bind:authMode
     bind:authUsername
     bind:authPassword
-    bind:authDisplayName
     {error}
     {loading}
     {submitAuth}
