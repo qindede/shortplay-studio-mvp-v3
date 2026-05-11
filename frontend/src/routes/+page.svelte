@@ -761,6 +761,21 @@
     showCreateAssetModal = false;
     refreshDashboard();
   }
+
+  async function deleteAsset(asset: Asset) {
+    const confirmed = await requestDeleteConfirmation({
+      title: '删除素材',
+      message: `确定删除「${asset.name}」吗？`,
+      detail: '此操作不可恢复。',
+      confirmText: '确认删除'
+    });
+    if (!confirmed) return;
+
+    await safeRun(async () => {
+      await api.deleteAsset(asset.id);
+      assets = assets.filter((a) => a.id !== asset.id);
+    });
+  }
 </script>
 
 {#if !currentUser}
@@ -826,7 +841,7 @@
           {/if}
 
           {#if activePage === 'assets'}
-            <AssetsPage {currentProject} {assets} bind:assetType {createAsset} />
+            <AssetsPage {currentProject} {assets} bind:assetType {createAsset} on:deleteAsset={(e) => deleteAsset(e.detail)} />
           {/if}
 
           {#if activePage === 'video'}

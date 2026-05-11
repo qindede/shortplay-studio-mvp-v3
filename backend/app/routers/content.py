@@ -403,6 +403,19 @@ def list_assets(project_id: str, type: str | None = None, user: dict = Depends(g
     return assets
 
 
+@router.delete("/assets/{asset_id}")
+def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        asset = next((a for a in data["assets"] if a["id"] == asset_id), None)
+        if not asset:
+            raise HTTPException(status_code=404, detail="素材不存在")
+        verify_project_ownership(data, asset["project_id"], user["id"])
+        data["assets"] = [a for a in data["assets"] if a["id"] != asset_id]
+        return {"ok": True}
+
+    return update(mutate)
+
+
 @router.post("/projects/{project_id}/assets")
 def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get_current_user)):
     def mutate(data):

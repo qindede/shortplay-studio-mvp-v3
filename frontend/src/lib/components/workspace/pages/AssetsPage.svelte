@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import type { Asset, AssetReference, Project } from '$lib/api';
 
   export let currentProject: Project | null = null;
   export let assets: Asset[] = [];
   export let assetType: 'all' | Asset['type'] = 'all';
   export let createAsset: () => void | Promise<void>;
+
+  const dispatch = createEventDispatcher<{ deleteAsset: Asset }>();
 
   let detailAsset: Asset | null = null;
   let selectedRefIndex = 0;
@@ -71,24 +74,32 @@
   <div class="panel-body">
     <div class="asset-grid">
       {#each filteredAssets as asset}
-        <button class="asset-card asset-card-button" on:click={() => openAssetDetail(asset)}>
-          <div class={'asset-preview ' + getAssetPreviewClass(asset)}>
-            {#if asset.image}
-              <img class="asset-image" src={asset.image} alt={asset.name} />
-            {:else if asset.type !== 'scene'}
-              <div class="portrait">{asset.initial}</div>
-            {/if}
-            {#if getAssetReferences(asset).length > 1}
-              <div class="asset-ref-badge">{getAssetReferences(asset).length} 张</div>
-            {/if}
-          </div>
+        <div class="asset-card-wrapper">
+          <button class="asset-card asset-card-button" on:click={() => openAssetDetail(asset)}>
+            <div class={'asset-preview ' + getAssetPreviewClass(asset)}>
+              {#if asset.image}
+                <img class="asset-image" src={asset.image} alt={asset.name} />
+              {:else if asset.type !== 'scene'}
+                <div class="portrait">{asset.initial}</div>
+              {/if}
+              {#if getAssetReferences(asset).length > 1}
+                <div class="asset-ref-badge">{getAssetReferences(asset).length} 张</div>
+              {/if}
+            </div>
 
-          <div class="asset-body">
-            <div class="asset-name">{asset.name}</div>
-            <div class="asset-desc">{asset.description}</div>
-            <!-- <div class="asset-foot"><span>{getAssetReferences(asset).length} 张参考</span><span class="btn btn-text asset-view-text">查看</span></div> -->
+            <div class="asset-body">
+              <div class="asset-name">{asset.name}</div>
+              <div class="asset-desc">{asset.description}</div>
+            </div>
+          </button>
+          <div class="project-card-actions">
+            <button
+              class="project-action-btn project-action-danger"
+              aria-label={`删除 ${asset.name}`}
+              on:click|stopPropagation={() => dispatch('deleteAsset', asset)}
+            >删除</button>
           </div>
-        </button>
+        </div>
       {/each}
 
       <button class="empty-card" on:click={createAsset}>
