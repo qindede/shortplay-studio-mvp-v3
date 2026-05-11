@@ -1941,30 +1941,41 @@ textarea {
   background: var(--text);
   color: var(--ink);
 }
-.upload-zone {
+.upload-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  min-height: 120px;
+  align-items: stretch;
+  cursor: pointer;
+}
+.upload-row::-webkit-scrollbar { height: 6px; }
+.upload-row::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+}
+.upload-add-card {
+  flex: 0 0 auto;
+  width: 120px;
+  min-height: 120px;
   border: 2px dashed var(--line);
   border-radius: var(--radius);
-  padding: 32px 16px;
-  text-align: center;
-  cursor: pointer;
-  transition: .18s ease;
-  background: rgba(255,255,255,0.02);
-}
-.upload-zone:hover {
-  border-color: var(--accent);
-  background: rgba(255,255,255,0.04);
-}
-.upload-zone-text {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
+  transition: .18s ease;
+  background: rgba(255,255,255,0.02);
 }
-.upload-icon {
-  width: 40px;
-  height: 40px;
+.upload-row:hover .upload-add-card {
+  border-color: var(--accent);
+  background: rgba(255,255,255,0.04);
+}
+.upload-add-icon {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: rgba(255,255,255,0.08);
   display: grid;
@@ -1972,58 +1983,81 @@ textarea {
   font-size: 22px;
   color: var(--accent);
 }
-.upload-hint {
-  font-size: 12px;
+.upload-add-text {
   color: var(--muted);
-  opacity: 0.7;
+  font-size: 12px;
+  font-weight: 850;
 }
-.upload-thumbs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 8px;
+.upload-hint-line {
+  color: var(--muted);
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 6px;
 }
 .upload-thumb {
   position: relative;
-  aspect-ratio: 1;
+  flex: 0 0 auto;
+  width: 120px;
+  min-height: 120px;
   border-radius: var(--radius);
   overflow: hidden;
   border: 2px solid var(--line);
   transition: .18s ease;
+  cursor: default;
 }
 .upload-thumb.is-main {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(99,102,241,0.3);
+  box-shadow: 0 0 0 2px rgba(255, 90, 42, 0.3);
 }
 .upload-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.upload-thumb-actions {
+.upload-thumb-overlay {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
   right: 0;
+  bottom: 0;
   display: flex;
-  justify-content: space-between;
-  padding: 2px 4px;
-  background: rgba(0,0,0,0.6);
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0,0,0,0.55);
   opacity: 0;
   transition: .15s ease;
 }
-.upload-thumb:hover .upload-thumb-actions {
+.upload-thumb:hover .upload-thumb-overlay {
   opacity: 1;
 }
-.thumb-main-btn,
-.thumb-remove-btn {
-  background: transparent;
+.thumb-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
   color: #fff;
-  font-size: 11px;
-  padding: 2px 4px;
-  border-radius: 3px;
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+  transition: .15s ease;
 }
-.thumb-remove-btn {
-  color: #f87171;
+.thumb-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+.thumb-btn-remove:hover {
+  background: rgba(255,80,80,0.6);
+}
+.thumb-main-label {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: var(--accent);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 850;
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 .create-asset-body textarea {
   min-height: 124px;

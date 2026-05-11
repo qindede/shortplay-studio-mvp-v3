@@ -189,12 +189,15 @@
 
         {#if mode === 'upload'}
           <div
-            class="upload-zone"
+            class="upload-row"
             role="button"
             tabindex="0"
             on:drop={handleDrop}
             on:dragover={handleDragOver}
-            on:click={() => document.getElementById('asset-file-input')?.click()}
+            on:click={(e) => {
+              if ((e.target as HTMLElement).closest('.upload-thumb')) return;
+              document.getElementById('asset-file-input')?.click();
+            }}
             on:keydown={(e) => e.key === 'Enter' && document.getElementById('asset-file-input')?.click()}
           >
             <input
@@ -205,28 +208,26 @@
               hidden
               on:change={handleFileSelect}
             />
-            <div class="upload-zone-text">
-              <span class="upload-icon">+</span>
-              <span>拖拽或点击上传参考图</span>
-              <span class="upload-hint">支持 JPG / PNG / WebP，可多选</span>
+            {#each previewUrls as url, i}
+              <div class="upload-thumb" class:is-main={i === mainIndex} role="presentation" on:click|stopPropagation>
+                <img src={url} alt="参考 {i + 1}" />
+                <div class="upload-thumb-overlay">
+                  <button class="thumb-btn" title="设为主图" on:click|stopPropagation={() => setMain(i)}>
+                    {i === mainIndex ? '★' : '☆'}
+                  </button>
+                  <button class="thumb-btn thumb-btn-remove" title="删除" on:click|stopPropagation={() => removeFile(i)}>×</button>
+                </div>
+                {#if i === mainIndex}
+                  <div class="thumb-main-label">主图</div>
+                {/if}
+              </div>
+            {/each}
+            <div class="upload-add-card">
+              <span class="upload-add-icon">+</span>
+              <span class="upload-add-text">{previewUrls.length === 0 ? '上传参考图' : '添加'}</span>
+              <span class="upload-add-hint">JPG / PNG / WebP</span>
             </div>
           </div>
-
-          {#if previewUrls.length > 0}
-            <div class="upload-thumbs">
-              {#each previewUrls as url, i}
-                <div class="upload-thumb" class:is-main={i === mainIndex}>
-                  <img src={url} alt="参考 {i + 1}" />
-                  <div class="upload-thumb-actions">
-                    <button class="thumb-main-btn" title="设为主图" on:click|stopPropagation={() => setMain(i)}>
-                      {i === mainIndex ? '★ 主图' : '☆'}
-                    </button>
-                    <button class="thumb-remove-btn" title="移除" on:click|stopPropagation={() => removeFile(i)}>×</button>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
         {:else}
           <div class="field">
             <label for="asset-ai-prompt">生成描述</label>
