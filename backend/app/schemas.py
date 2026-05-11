@@ -75,6 +75,8 @@ class AssetCreate(BaseModel):
     description: str = ""
     initial: str = "素"
     image: str | None = None
+    voice: str | None = None
+    voice_url: str | None = None
     references: list[dict] | None = None
 
 

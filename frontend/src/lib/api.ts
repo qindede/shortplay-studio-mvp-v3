@@ -183,6 +183,8 @@ export interface Asset {
   ref_count: number;
   initial: string;
   image?: string;
+  voice?: string;
+  voice_url?: string;
   references?: AssetReference[];
   updated_at: string;
 }
@@ -262,7 +264,7 @@ export const api = {
   generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
   videoTasks: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/video-tasks`),
   assets: (projectId: string, type?: string) => request<Asset[]>(`/api/projects/${projectId}/assets${type ? `?type=${type}` : ''}`),
-  createAsset: (projectId: string, body: { type: string; name: string; description: string; initial: string; image?: string; references?: { type: string; name: string; url?: string; note?: string }[] }) =>
+  createAsset: (projectId: string, body: { type: string; name: string; description: string; initial: string; image?: string; voice?: string; voice_url?: string; references?: { type: string; name: string; url?: string; note?: string }[] }) =>
     request<Asset>(`/api/projects/${projectId}/assets`, { method: 'POST', body: JSON.stringify(body) }),
   generateAsset: (projectId: string, body: { type: string; name: string; description: string; prompt: string }) =>
     request<Asset>(`/api/projects/${projectId}/assets/generate`, { method: 'POST', body: JSON.stringify(body) }),

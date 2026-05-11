@@ -1319,6 +1319,99 @@ textarea {
   font-weight: 900;
   backdrop-filter: blur(8px);
 }
+.voice-upload-btn {
+  appearance: none;
+  border: 1px dashed rgba(139,211,255,0.35);
+  border-radius: var(--radius);
+  background: rgba(139,211,255,0.06);
+  color: #8bd3ff;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+.voice-upload-btn:hover {
+  background: rgba(139,211,255,0.12);
+  border-color: rgba(139,211,255,0.5);
+}
+.voice-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(139,211,255,0.25);
+  border-radius: var(--radius);
+  background: rgba(139,211,255,0.08);
+}
+.voice-file-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.voice-file-remove {
+  appearance: none;
+  border: none;
+  background: rgba(255,255,255,0.1);
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.voice-file-remove:hover {
+  background: rgba(234,63,29,0.2);
+  color: #ea3f1d;
+}
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.voice-row p {
+  margin: 0;
+  flex: 1;
+}
+.voice-play-btn {
+  appearance: none;
+  border: 1px solid rgba(139,211,255,0.35);
+  border-radius: 20px;
+  background: rgba(139,211,255,0.1);
+  color: #8bd3ff;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 14px 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.voice-play-btn:hover {
+  background: rgba(139,211,255,0.2);
+  border-color: rgba(139,211,255,0.5);
+}
+.voice-play-btn.playing {
+  background: rgba(139,211,255,0.25);
+  border-color: #8bd3ff;
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139,211,255,0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(139,211,255,0); }
+}
 .asset-view-text {
   flex-shrink: 0;
 }

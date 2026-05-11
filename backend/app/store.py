@@ -463,6 +463,8 @@ def seed_data() -> dict[str, Any]:
                 "ref_count": 8,
                 "initial": "林",
                 "image": "/portraits/linwan.jpg",
+                "voice": "温柔清冷女声",
+                "voice_url": "/voices/linwan.wav",
                 "updated_at": ts,
             },
             {
@@ -474,6 +476,8 @@ def seed_data() -> dict[str, Any]:
                 "ref_count": 6,
                 "initial": "顾",
                 "image": "/portraits/guchen.jpg",
+                "voice": "低沉磁性男声",
+                "voice_url": "/voices/guchen.wav",
                 "updated_at": ts,
             },
             {
@@ -485,6 +489,8 @@ def seed_data() -> dict[str, Any]:
                 "ref_count": 5,
                 "initial": "苏",
                 "image": "/portraits/suqing.jpg",
+                "voice": "甜美傲娇女声",
+                "voice_url": "/voices/suqing.wav",
                 "updated_at": ts,
             },
             {
@@ -540,6 +546,8 @@ def seed_data() -> dict[str, Any]:
                 "ref_count": 6,
                 "initial": "白",
                 "image": "/portraits/bairuoxue.jpg",
+                "voice": "柔美温婉女声",
+                "voice_url": "/voices/bairuoxue.wav",
                 "updated_at": ts,
             },
             {
@@ -563,6 +571,8 @@ def seed_data() -> dict[str, Any]:
                 "ref_count": 5,
                 "initial": "陆",
                 "image": "/portraits/lujiinian.jpg",
+                "voice": "沉稳内敛男声",
+                "voice_url": "/voices/lujiinian.wav",
                 "updated_at": ts,
             },
             {
@@ -574,6 +584,8 @@ def seed_data() -> dict[str, Any]:
                 "ref_count": 4,
                 "initial": "周",
                 "image": "/portraits/zhouzixuan.jpg",
+                "voice": "嚣张傲慢男声",
+                "voice_url": "/voices/zhouzixuan.wav",
                 "updated_at": ts,
             },
             {
@@ -978,6 +990,25 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
                 asset["ref_count"] = max(int(asset.get("ref_count", 0)), len(sources))
             else:
                 asset["references"] = []
+            changed = True
+    # Migrate voice and voice_url fields on character assets
+    _asset_voice_map = {
+        "asset_linwan": ("温柔清冷女声", "/voices/linwan.wav"),
+        "asset_guchen": ("低沉磁性男声", "/voices/guchen.wav"),
+        "asset_suqing": ("甜美傲娇女声", "/voices/suqing.wav"),
+        "asset_bairuoxue": ("柔美温婉女声", "/voices/bairuoxue.wav"),
+        "asset_lujiinian": ("沉稳内敛男声", "/voices/lujiinian.wav"),
+        "asset_zhouzixuan": ("嚣张傲慢男声", "/voices/zhouzixuan.wav"),
+    }
+    for asset in data.get("assets", []):
+        if asset.get("type") == "character" and "voice" not in asset:
+            voice_info = _asset_voice_map.get(asset["id"])
+            if voice_info:
+                asset["voice"] = voice_info[0]
+                asset["voice_url"] = voice_info[1]
+            else:
+                asset["voice"] = None
+                asset["voice_url"] = None
             changed = True
     if "users" not in data:
         data["users"] = default_users()

@@ -15,6 +15,9 @@
   let type: Asset['type'] = 'character';
   let name = '';
   let description = '';
+  let voice = '';
+  let voiceFile: File | null = null;
+  let voicePreviewUrl: string | null = null;
   let files: File[] = [];
   let previewUrls: string[] = [];
   let mainIndex = 0;
@@ -35,6 +38,9 @@
     type = 'character';
     name = '';
     description = '';
+    voice = '';
+    voiceFile = null;
+    voicePreviewUrl = null;
     files = [];
     previewUrls = [];
     mainIndex = 0;
@@ -85,6 +91,20 @@
     e.preventDefault();
   }
 
+  function handleVoiceSelect(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    voiceFile = input.files[0];
+    voicePreviewUrl = URL.createObjectURL(voiceFile);
+    input.value = '';
+  }
+
+  function removeVoice() {
+    if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
+    voiceFile = null;
+    voicePreviewUrl = null;
+  }
+
   async function handleSubmit() {
     if (!name.trim()) { error = '请输入素材名称'; return; }
     error = '';
@@ -100,6 +120,7 @@
     submitting = true;
     try {
       let imageUrl: string | undefined;
+      let voiceUrl: string | undefined;
       const refs: { type: string; name: string; url?: string }[] = [];
 
       for (let i = 0; i < files.length; i++) {
@@ -109,12 +130,19 @@
         if (i === mainIndex) imageUrl = result.url;
       }
 
+      if (voiceFile) {
+        const result = await api.upload(voiceFile);
+        voiceUrl = result.url;
+      }
+
       const asset = await api.createAsset(projectId, {
         type,
         name: name.trim(),
         description: description.trim(),
         initial: name.trim().slice(0, 1),
         image: imageUrl,
+        voice: voice.trim() || undefined,
+        voice_url: voiceUrl,
         references: refs.length ? refs : undefined
       });
 
@@ -187,6 +215,35 @@
           <label for="asset-desc">素材描述</label>
           <input id="asset-desc" bind:value={description} placeholder="简要描述素材的外观、特征或用途" />
         </div>
+
+        {#if type === 'character'}
+          <div class="field">
+            <label for="asset-voice">声音特征</label>
+            <input id="asset-voice" bind:value={voice} placeholder="如：温柔清冷女声、低沉磁性男声" />
+          </div>
+          {#if mode === 'upload'}
+            <div class="field">
+              <label>声音文件</label>
+              {#if voiceFile}
+                <div class="voice-file-row">
+                  <span class="voice-file-name">{voiceFile.name}</span>
+                  <button class="voice-file-remove" on:click={removeVoice}>×</button>
+                </div>
+              {:else}
+                <button class="voice-upload-btn" on:click={() => document.getElementById('voice-file-input')?.click()}>
+                  上传声音文件
+                </button>
+              {/if}
+              <input
+                id="voice-file-input"
+                type="file"
+                accept="audio/*"
+                hidden
+                on:change={handleVoiceSelect}
+              />
+            </div>
+          {/if}
+        {/if}
 
         {#if mode === 'upload'}
           <div

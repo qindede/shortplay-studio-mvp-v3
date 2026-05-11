@@ -446,6 +446,8 @@ def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get
             "ref_count": len(references),
             "initial": payload.initial[:1] or payload.name[:1],
             "image": payload.image,
+            "voice": payload.voice,
+            "voice_url": payload.voice_url,
             "references": references,
             "updated_at": ts,
         }
@@ -496,6 +498,8 @@ def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends
             "ref_count": 1,
             "initial": payload.name[:1],
             "image": image_url,
+            "voice": None,
+            "voice_url": None,
             "references": references,
             "updated_at": ts,
         }

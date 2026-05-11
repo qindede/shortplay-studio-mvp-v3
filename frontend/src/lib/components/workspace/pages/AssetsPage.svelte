@@ -11,6 +11,8 @@
 
   let detailAsset: Asset | null = null;
   let selectedRefIndex = 0;
+  let voiceAudio: HTMLAudioElement | null = null;
+  let voicePlaying = false;
 
   $: filteredAssets = assetType === 'all' ? assets : assets.filter((asset) => asset.type === assetType);
   $: detailRefs = detailAsset ? getAssetReferences(detailAsset) : [];
@@ -47,11 +49,37 @@
   function openAssetDetail(asset: Asset) {
     detailAsset = asset;
     selectedRefIndex = 0;
+    stopVoice();
   }
 
   function closeAssetDetail() {
+    stopVoice();
     detailAsset = null;
     selectedRefIndex = 0;
+  }
+
+  function toggleVoice() {
+    if (!detailAsset?.voice_url) return;
+    if (voicePlaying && voiceAudio) {
+      voiceAudio.pause();
+      voiceAudio.currentTime = 0;
+      voicePlaying = false;
+    } else {
+      stopVoice();
+      voiceAudio = new Audio(detailAsset.voice_url);
+      voiceAudio.onended = () => { voicePlaying = false; };
+      voiceAudio.play();
+      voicePlaying = true;
+    }
+  }
+
+  function stopVoice() {
+    if (voiceAudio) {
+      voiceAudio.pause();
+      voiceAudio.currentTime = 0;
+      voiceAudio = null;
+    }
+    voicePlaying = false;
   }
 </script>
 
@@ -153,6 +181,24 @@
             <span>{selectedRef?.type || detailAsset.type}</span>
           </div>
           <div class="preview-row"><span>素材描述</span><p>{detailAsset.description}</p></div>
+          {#if detailAsset.voice}
+            <div class="preview-row">
+              <span>声音特征</span>
+              <div class="voice-row">
+                <p>{detailAsset.voice}</p>
+                {#if detailAsset.voice_url}
+                  <button class="voice-play-btn" class:playing={voicePlaying} on:click={toggleVoice} title={voicePlaying ? '停止' : '试听'}>
+                    {#if voicePlaying}
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="4" height="10" rx="1"/><rect x="9" y="3" width="4" height="10" rx="1"/></svg>
+                    {:else}
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
+                    {/if}
+                    <span>{voicePlaying ? '停止' : '试听'}</span>
+                  </button>
+                {/if}
+              </div>
+            </div>
+          {/if}
           {#if selectedRef?.note}<div class="preview-row"><span>参考说明</span><p>{selectedRef.note}</p></div>{/if}
           <div class="preview-row"><span>资产类型</span><p>{getAssetTypeLabel(detailAsset.type)}</p></div>
           <div class="preview-row"><span>参考数量</span><p>{detailRefs.length} 张</p></div>
