@@ -195,7 +195,7 @@
             on:drop={handleDrop}
             on:dragover={handleDragOver}
             on:click={(e) => {
-              if ((e.target as HTMLElement).closest('.upload-thumb')) return;
+              if ((e.target as HTMLElement).closest('.upload-thumb') || (e.target as HTMLElement).closest('.upload-add-card')) return;
               document.getElementById('asset-file-input')?.click();
             }}
             on:keydown={(e) => e.key === 'Enter' && document.getElementById('asset-file-input')?.click()}
@@ -208,6 +208,19 @@
               hidden
               on:change={handleFileSelect}
             />
+            <div
+              class="upload-add-card"
+              role="button"
+              tabindex="0"
+              on:click|stopPropagation={() => document.getElementById('asset-file-input')?.click()}
+              on:keydown={(e) => e.key === 'Enter' && document.getElementById('asset-file-input')?.click()}
+              on:drop|stopPropagation={handleDrop}
+              on:dragover|stopPropagation={handleDragOver}
+            >
+              <span class="upload-add-icon">+</span>
+              <span class="upload-add-text">{previewUrls.length === 0 ? '上传参考图' : '添加'}</span>
+              <span class="upload-add-hint">JPG / PNG / WebP</span>
+            </div>
             {#each previewUrls as url, i}
               <div class="upload-thumb" class:is-main={i === mainIndex} role="presentation" on:click|stopPropagation>
                 <img src={url} alt="参考 {i + 1}" />
@@ -222,11 +235,6 @@
                 {/if}
               </div>
             {/each}
-            <div class="upload-add-card">
-              <span class="upload-add-icon">+</span>
-              <span class="upload-add-text">{previewUrls.length === 0 ? '上传参考图' : '添加'}</span>
-              <span class="upload-add-hint">JPG / PNG / WebP</span>
-            </div>
           </div>
         {:else}
           <div class="field">
