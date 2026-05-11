@@ -515,6 +515,7 @@ def seed_data() -> dict[str, Any]:
                 "description": "豪门错爱主视觉海报，1080x1920竖版，用于投放和宣传。",
                 "ref_count": 2,
                 "initial": "海",
+                "image": "/images/poster.jpg",
                 "updated_at": ts,
             },
             {
