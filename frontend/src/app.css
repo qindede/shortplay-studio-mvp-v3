@@ -1191,6 +1191,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   font-size: 13px;
   margin-bottom: 7px;
 }
+.prompt-field {
+  position: relative;
+}
+.prompt-field textarea {
+  padding-bottom: 40px;
+}
 input, select, textarea {
   width: 100%;
   border: 1px solid var(--line);

@@ -13,6 +13,7 @@ from ..schemas import (
     OutlineGenerateResponse,
     ProjectCreate,
     ProjectUpdate,
+    PromptOptimizeRequest,
     ShotCreate,
     ShotUpdate,
 )
@@ -29,6 +30,7 @@ from ..services import (
     get_user_projects,
     get_user_usage,
     not_found,
+    optimize_prompt,
     renumber,
     touch_episode_and_project,
     touch_project,
@@ -53,6 +55,12 @@ def dashboard(user: dict = Depends(get_current_user)):
         "usage": usage_with_members(data, user["id"]),
         "current_user": user,
     }
+
+
+@router.post("/optimize-prompt")
+def optimize_prompt_endpoint(payload: PromptOptimizeRequest, user: dict = Depends(get_current_user)):
+    optimized = optimize_prompt(payload.prompt, payload.context)
+    return {"optimized": optimized}
 
 
 @router.get("/projects")

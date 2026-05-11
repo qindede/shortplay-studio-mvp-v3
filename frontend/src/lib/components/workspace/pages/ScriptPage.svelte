@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Asset, Episode, Project, Shot, ShotPayload, ShotUpdate, VideoVersion } from '$lib/api';
   import { getStatusClass, getStatusLabel } from '$lib/workspace/ui';
+  import PromptOptimizeButton from '../PromptOptimizeButton.svelte';
 
   export let selectedEpisode: Episode | null = null;
   export let currentProject: Project | null = null;
@@ -160,7 +161,14 @@
           <div class="field"><label for="episode-summary">剧情摘要</label><input id="episode-summary" bind:value={episodeSummary} /></div>
           <div class="field">
             <label for="episode-script">剧情内容</label>
-            <textarea id="episode-script" bind:value={episodeScript}></textarea>
+            <div class="prompt-field">
+              <textarea id="episode-script" bind:value={episodeScript}></textarea>
+              <PromptOptimizeButton
+                value={episodeScript}
+                context="episode_script"
+                onOptimized={(v) => (episodeScript = v)}
+              />
+            </div>
           </div>
           <div class="panel-actions script-editor-actions">
             <button class="btn btn-secondary" on:click={saveEpisodeOnly}>保存</button>
@@ -197,7 +205,17 @@
               <div class="field"><label for="shot-title">镜头标题</label><input id="shot-title" bind:value={editTitle} /></div>
               <div class="field"><label for="shot-duration">时长（秒）</label><input id="shot-duration" type="number" min="1" bind:value={editDuration} /></div>
             </div>
-            <div class="field"><label for="shot-visual">画面描述</label><textarea id="shot-visual" class="compact-textarea" bind:value={editVisual}></textarea></div>
+            <div class="field">
+              <label for="shot-visual">画面描述</label>
+              <div class="prompt-field">
+                <textarea id="shot-visual" class="compact-textarea" bind:value={editVisual}></textarea>
+                <PromptOptimizeButton
+                  value={editVisual}
+                  context="shot_visual"
+                  onOptimized={(v) => (editVisual = v)}
+                />
+              </div>
+            </div>
             <div class="field"><label for="shot-dialogue">台词 / 旁白</label><textarea id="shot-dialogue" class="compact-textarea" bind:value={editDialogue}></textarea></div>
             <div class="field-grid">
               <div class="field"><label for="shot-characters">角色</label><input id="shot-characters" bind:value={editCharacters} /></div>

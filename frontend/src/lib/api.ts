@@ -266,6 +266,8 @@ export const api = {
     request<Asset>(`/api/projects/${projectId}/assets`, { method: 'POST', body: JSON.stringify(body) }),
   generateAsset: (projectId: string, body: { type: string; name: string; description: string; prompt: string }) =>
     request<Asset>(`/api/projects/${projectId}/assets/generate`, { method: 'POST', body: JSON.stringify(body) }),
+  optimizePrompt: (body: { prompt: string; context: string }) =>
+    request<{ optimized: string }>('/api/optimize-prompt', { method: 'POST', body: JSON.stringify(body) }),
   upload: async (file: File): Promise<{ url: string }> => {
     const form = new FormData();
     form.append('file', file);

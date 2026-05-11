@@ -103,6 +103,11 @@ class ShotUpdate(BaseModel):
     duration: int | None = Field(default=None, ge=1, le=60)
 
 
+class PromptOptimizeRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    context: str = Field(default="general", pattern="^(asset_character|asset_scene|asset_image|asset_audio|project_description|episode_script|shot_visual|general)$")
+
+
 class ComposeRequest(BaseModel):
     name: str = "成片版本"
     description: str = "合成生成"

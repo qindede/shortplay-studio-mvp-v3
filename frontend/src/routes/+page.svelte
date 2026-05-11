@@ -33,6 +33,7 @@
   import { type AuthMode, type PageKey } from '$lib/workspace/ui';
   import ConfirmDialog from '$lib/components/workspace/ConfirmDialog.svelte';
   import CreateAssetModal from '$lib/components/workspace/pages/CreateAssetModal.svelte';
+  import PromptOptimizeButton from '$lib/components/workspace/PromptOptimizeButton.svelte';
 
   type AssetFilter = 'all' | Asset['type'];
   type DeleteConfirmState = {
@@ -888,11 +889,18 @@
 
           <div class="field episode-description-field">
             <label for="new-episode-script">文本描述</label>
-            <textarea
-              id="new-episode-script"
-              bind:value={newEpisodeScript}
-              placeholder="写下本集剧情正文、关键对白、反转节奏或结尾悬念"
-            ></textarea>
+            <div class="prompt-field">
+              <textarea
+                id="new-episode-script"
+                bind:value={newEpisodeScript}
+                placeholder="写下本集剧情正文、关键对白、反转节奏或结尾悬念"
+              ></textarea>
+              <PromptOptimizeButton
+                value={newEpisodeScript}
+                context="episode_script"
+                onOptimized={(v) => (newEpisodeScript = v)}
+              />
+            </div>
           </div>
 
           {#if pointBalance < storyboardCost}
@@ -941,12 +949,19 @@
 
           <div class="field">
             <label for="project-description">短剧简介</label>
-            <textarea
-              id="project-description"
-              class="project-description-input"
-              bind:value={projectDescription}
-              placeholder="写清主角、核心冲突、爽点或反转。"
-            ></textarea>
+            <div class="prompt-field">
+              <textarea
+                id="project-description"
+                class="project-description-input"
+                bind:value={projectDescription}
+                placeholder="写清主角、核心冲突、爽点或反转。"
+              ></textarea>
+              <PromptOptimizeButton
+                value={projectDescription}
+                context="project_description"
+                onOptimized={(v) => (projectDescription = v)}
+              />
+            </div>
           </div>
 
           {#if !editingProject && pointBalance < outlineCost}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Asset } from '$lib/api';
   import { api } from '$lib/api';
+  import PromptOptimizeButton from '../PromptOptimizeButton.svelte';
 
   export let show = false;
   export let projectId: string;
@@ -239,15 +240,22 @@
         {:else}
           <div class="field">
             <label for="asset-ai-prompt">生成描述</label>
-            <textarea
-              id="asset-ai-prompt"
-              bind:value={aiPrompt}
-              placeholder={type === 'character'
-                ? '如：一个穿黑色西装的年轻男性，冷峻面容，短发，站在落地窗前'
-                : type === 'scene'
-                  ? '如：现代风格的豪华宴会厅，水晶吊灯，金色装饰，舞池中央'
-                  : '描述你想要生成的素材外观'}
-            ></textarea>
+            <div class="prompt-field">
+              <textarea
+                id="asset-ai-prompt"
+                bind:value={aiPrompt}
+                placeholder={type === 'character'
+                  ? '如：一个穿黑色西装的年轻男性，冷峻面容，短发，站在落地窗前'
+                  : type === 'scene'
+                    ? '如：现代风格的豪华宴会厅，水晶吊灯，金色装饰，舞池中央'
+                    : '描述你想要生成的素材外观'}
+              ></textarea>
+              <PromptOptimizeButton
+                value={aiPrompt}
+                context={'asset_' + type}
+                onOptimized={(v) => (aiPrompt = v)}
+              />
+            </div>
           </div>
         {/if}
       </div>

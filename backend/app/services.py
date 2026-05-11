@@ -220,3 +220,91 @@ def consume_for_video(data: dict, user_id: str, shots: list[dict], scene: str, d
 
 def user_response(data: dict, user_id: str) -> dict:
     return public_user(user_in_data(data, user_id))
+
+
+def optimize_prompt(prompt: str, context: str) -> str:
+    """Expand and enrich a user-written prompt for better AI generation results."""
+    text = prompt.strip()
+    if not text:
+        return text
+
+    if context == "asset_character":
+        parts = [text]
+        visual_keywords = [
+            "面部表情", "发型", "服装细节", "配饰", "体态",
+            "光影效果", "背景氛围", "色调", "镜头角度",
+        ]
+        missing = [k for k in visual_keywords if k not in text]
+        if len(text) < 30 and missing:
+            parts.append(f"。注意刻画{'、'.join(missing[:3])}，画面精细度高，8K画质")
+        if "风格" not in text and "画风" not in text:
+            parts.append("，写实风格，电影级光影")
+        return "".join(parts)
+
+    if context == "asset_scene":
+        parts = [text]
+        scene_keywords = [
+            "光线", "色调", "空间感", "材质", "氛围",
+            "前景", "背景", "透视", "细节",
+        ]
+        missing = [k for k in scene_keywords if k not in text]
+        if len(text) < 30 and missing:
+            parts.append(f"。注意表现{'、'.join(missing[:3])}，空间层次分明")
+        if "风格" not in text and "画风" not in text:
+            parts.append("，超高清渲染，电影级场景美术")
+        return "".join(parts)
+
+    if context == "asset_image":
+        parts = [text]
+        if len(text) < 25:
+            parts.append("。画面构图讲究，色彩协调，高清细节")
+        if "风格" not in text:
+            parts.append("，专业美术品质")
+        return "".join(parts)
+
+    if context == "asset_audio":
+        parts = [text]
+        if len(text) < 20:
+            parts.append("。音质清晰，节奏合适，情绪到位")
+        return "".join(parts)
+
+    if context == "project_description":
+        parts = [text]
+        story_elements = [
+            "主角", "冲突", "反转", "爽点", "悬念", "情感",
+        ]
+        missing = [k for k in story_elements if k not in text]
+        if len(text) < 40 and missing:
+            parts.append(f"。建议补充{'、'.join(missing[:2])}等要素，让故事更饱满")
+        if "集" not in text and "季" not in text:
+            parts.append("，节奏紧凑，适合短剧分集呈现")
+        return "".join(parts)
+
+    if context == "episode_script":
+        parts = [text]
+        script_elements = [
+            "开场", "冲突", "对白", "反转", "悬念", "高潮",
+        ]
+        missing = [k for k in script_elements if k not in text]
+        if len(text) < 60 and missing:
+            parts.append(f"\n\n建议补充：{'、'.join(missing[:3])}，增强叙事张力。")
+        if "秒" not in text and "镜头" not in text:
+            parts.append("每个关键情节点用画面+对白组合推进。")
+        return "".join(parts)
+
+    if context == "shot_visual":
+        parts = [text]
+        visual_elements = [
+            "镜头", "光线", "色彩", "构图", "景深", "运动",
+        ]
+        missing = [k for k in visual_elements if k not in text]
+        if len(text) < 25 and missing:
+            parts.append(f"。{'、'.join(missing[:2])}到位，画面质感强")
+        if "风格" not in text:
+            parts.append("，电影级画面")
+        return "".join(parts)
+
+    # general context
+    if len(text) < 20:
+        return text + "。请提供更详细的描述以获得更好的生成效果。"
+    return text
