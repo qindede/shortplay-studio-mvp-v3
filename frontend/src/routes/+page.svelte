@@ -789,6 +789,10 @@
     });
   }
 
+  function handleAssetUpdated(asset: Asset) {
+    assets = assets.map((a) => (a.id === asset.id ? asset : a));
+  }
+
   async function deleteVersion(version: VideoVersion) {
     const confirmed = await requestDeleteConfirmation({
       title: '删除版本',
@@ -868,7 +872,7 @@
           {/if}
 
           {#if activePage === 'assets'}
-            <AssetsPage {currentProject} {assets} bind:assetType {createAsset} on:deleteAsset={(e) => deleteAsset(e.detail)} />
+            <AssetsPage {currentProject} {assets} bind:assetType {createAsset} on:deleteAsset={(e) => deleteAsset(e.detail)} on:assetUpdated={(e) => handleAssetUpdated(e.detail)} />
           {/if}
 
           {#if activePage === 'video'}

@@ -1511,6 +1511,48 @@ textarea {
 .asset-detail-info {
   min-height: 0;
 }
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.edit-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.edit-form label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.edit-form input,
+.edit-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+.edit-form input:focus,
+.edit-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.edit-form textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 .progress { width: 132px; }
 .progress span { background: var(--accent-2); }
 .video-thumb {

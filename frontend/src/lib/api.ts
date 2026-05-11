@@ -270,6 +270,8 @@ export const api = {
     request<Asset>(`/api/projects/${projectId}/assets/generate`, { method: 'POST', body: JSON.stringify(body) }),
   deleteAsset: (assetId: string) =>
     request<{ ok: boolean }>(`/api/assets/${assetId}`, { method: 'DELETE' }),
+  updateAsset: (assetId: string, body: { name?: string; description?: string; initial?: string; image?: string; voice?: string; voice_url?: string; references?: { id?: string; type: string; name: string; url?: string; note?: string }[] }) =>
+    request<Asset>(`/api/assets/${assetId}`, { method: 'PUT', body: JSON.stringify(body) }),
   optimizePrompt: (body: { prompt: string; context: string }) =>
     request<{ optimized: string }>('/api/optimize-prompt', { method: 'POST', body: JSON.stringify(body) }),
   upload: async (file: File): Promise<{ url: string }> => {

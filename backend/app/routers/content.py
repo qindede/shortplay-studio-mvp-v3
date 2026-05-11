@@ -6,6 +6,7 @@ from ..config import POINT_RULES
 from ..schemas import (
     AssetCreate,
     AssetGenerate,
+    AssetUpdate,
     ComposeRequest,
     EpisodeCreate,
     EpisodeUpdate,
@@ -412,6 +413,37 @@ def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
         verify_project_ownership(data, asset["project_id"], user["id"])
         data["assets"] = [a for a in data["assets"] if a["id"] != asset_id]
         return {"ok": True}
+
+    return update(mutate)
+
+
+@router.put("/assets/{asset_id}")
+def update_asset(asset_id: str, payload: AssetUpdate, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        asset = next((a for a in data["assets"] if a["id"] == asset_id), None)
+        if not asset:
+            raise HTTPException(status_code=404, detail="素材不存在")
+        verify_project_ownership(data, asset["project_id"], user["id"])
+
+        ts = now()
+        update_data = payload.model_dump(exclude_unset=True)
+
+        if "references" in update_data and update_data["references"] is not None:
+            references = []
+            for i, ref in enumerate(update_data["references"]):
+                references.append({
+                    "id": ref.get("id") or uid("ref"),
+                    "type": ref.get("type", "image"),
+                    "name": ref.get("name", f"参考 {i + 1:02d}"),
+                    "url": ref.get("url"),
+                    "note": ref.get("note"),
+                })
+            update_data["references"] = references
+
+        asset.update(update_data)
+        asset["updated_at"] = ts
+        touch_project(data, asset["project_id"], ts)
+        return asset
 
     return update(mutate)
 

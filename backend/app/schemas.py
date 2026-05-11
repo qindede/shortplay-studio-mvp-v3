@@ -80,6 +80,16 @@ class AssetCreate(BaseModel):
     references: list[dict] | None = None
 
 
+class AssetUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    initial: str | None = None
+    image: str | None = None
+    voice: str | None = None
+    voice_url: str | None = None
+    references: list[dict] | None = None
+
+
 class AssetGenerate(BaseModel):
     type: str = Field(pattern="^(character|scene|image|audio)$")
     name: str = Field(min_length=1)

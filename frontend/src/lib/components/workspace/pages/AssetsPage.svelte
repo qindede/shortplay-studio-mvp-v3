@@ -1,18 +1,23 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { Asset, AssetReference, Project } from '$lib/api';
+  import { api, type Asset, type AssetReference, type Project } from '$lib/api';
 
   export let currentProject: Project | null = null;
   export let assets: Asset[] = [];
   export let assetType: 'all' | Asset['type'] = 'all';
   export let createAsset: () => void | Promise<void>;
 
-  const dispatch = createEventDispatcher<{ deleteAsset: Asset }>();
+  const dispatch = createEventDispatcher<{ deleteAsset: Asset; assetUpdated: Asset }>();
 
   let detailAsset: Asset | null = null;
   let selectedRefIndex = 0;
   let voiceAudio: HTMLAudioElement | null = null;
   let voicePlaying = false;
+  let editing = false;
+  let editName = '';
+  let editDescription = '';
+  let editInitial = '';
+  let saving = false;
 
   $: filteredAssets = assetType === 'all' ? assets : assets.filter((asset) => asset.type === assetType);
   $: detailRefs = detailAsset ? getAssetReferences(detailAsset) : [];
@@ -46,16 +51,53 @@
     }));
   }
 
-  function openAssetDetail(asset: Asset) {
+  function openAssetDetail(asset: Asset, editMode = false) {
     detailAsset = asset;
     selectedRefIndex = 0;
     stopVoice();
+    if (editMode) {
+      startEdit();
+    } else {
+      editing = false;
+    }
   }
 
   function closeAssetDetail() {
     stopVoice();
     detailAsset = null;
     selectedRefIndex = 0;
+    editing = false;
+  }
+
+  function startEdit() {
+    if (!detailAsset) return;
+    editName = detailAsset.name;
+    editDescription = detailAsset.description;
+    editInitial = detailAsset.initial;
+    editing = true;
+  }
+
+  function cancelEdit() {
+    editing = false;
+  }
+
+  async function saveEdit() {
+    if (!detailAsset || saving) return;
+    saving = true;
+    try {
+      const updated = await api.updateAsset(detailAsset.id, {
+        name: editName,
+        description: editDescription,
+        initial: editInitial
+      });
+      detailAsset = updated;
+      editing = false;
+      dispatch('assetUpdated', updated);
+    } catch (e) {
+      console.error('Failed to update asset:', e);
+    } finally {
+      saving = false;
+    }
   }
 
   function toggleVoice() {
@@ -102,7 +144,7 @@
   <div class="panel-body">
     <div class="asset-grid">
       {#each filteredAssets as asset}
-        <button class="asset-card asset-card-button" on:click={() => openAssetDetail(asset)}>
+        <div class="asset-card" role="button" tabindex="0" on:click={() => openAssetDetail(asset)} on:keydown={(e) => e.key === 'Enter' && openAssetDetail(asset)}>
           <div class={'asset-preview ' + getAssetPreviewClass(asset)}>
             {#if asset.image}
               <img class="asset-image" src={asset.image} alt={asset.name} />
@@ -119,6 +161,7 @@
             <div class="asset-desc">{asset.description}</div>
           </div>
           <div class="project-card-actions">
+            <button class="project-action-btn" aria-label={`编辑 ${asset.name}`} on:click|stopPropagation={() => openAssetDetail(asset, true)}>编辑</button>
             <span
               class="project-action-btn project-action-danger"
               role="button"
@@ -128,7 +171,7 @@
               on:keydown|stopPropagation={(e) => e.key === 'Enter' && dispatch('deleteAsset', asset)}
             >删除</span>
           </div>
-        </button>
+        </div>
       {/each}
 
       <button class="empty-card" on:click={createAsset}>
@@ -176,32 +219,55 @@
         </div>
 
         <div class="preview-detail asset-detail-info">
-          <div class="preview-detail-head">
-            <b>{selectedRef?.name || '素材详情'}</b>
-            <span>{selectedRef?.type || detailAsset.type}</span>
-          </div>
-          <div class="preview-row"><span>素材描述</span><p>{detailAsset.description}</p></div>
-          {#if detailAsset.voice}
-            <div class="preview-row">
-              <span>声音特征</span>
-              <div class="voice-row">
-                <p>{detailAsset.voice}</p>
-                {#if detailAsset.voice_url}
-                  <button class="voice-play-btn" class:playing={voicePlaying} on:click={toggleVoice} title={voicePlaying ? '停止' : '试听'}>
-                    {#if voicePlaying}
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="4" height="10" rx="1"/><rect x="9" y="3" width="4" height="10" rx="1"/></svg>
-                    {:else}
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
-                    {/if}
-                    <span>{voicePlaying ? '停止' : '试听'}</span>
-                  </button>
-                {/if}
+          {#if editing}
+            <div class="edit-form">
+              <div class="form-group">
+                <label for="edit-name">名称</label>
+                <input id="edit-name" type="text" bind:value={editName} placeholder="素材名称" />
+              </div>
+              <div class="form-group">
+                <label for="edit-description">描述</label>
+                <textarea id="edit-description" bind:value={editDescription} placeholder="素材描述" rows="3"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="edit-initial">首字</label>
+                <input id="edit-initial" type="text" bind:value={editInitial} placeholder="首字" maxlength="1" />
+              </div>
+              <div class="form-actions">
+                <button class="btn-secondary" on:click={cancelEdit}>取消</button>
+                <button class="btn-primary" on:click={saveEdit} disabled={saving}>
+                  {saving ? '保存中...' : '保存'}
+                </button>
               </div>
             </div>
+          {:else}
+            <div class="preview-detail-head">
+              <b>{selectedRef?.name || '素材详情'}</b>
+              <span>{selectedRef?.type || detailAsset.type}</span>
+            </div>
+            <div class="preview-row"><span>素材描述</span><p>{detailAsset.description}</p></div>
+            {#if detailAsset.voice}
+              <div class="preview-row">
+                <span>声音特征</span>
+                <div class="voice-row">
+                  <p>{detailAsset.voice}</p>
+                  {#if detailAsset.voice_url}
+                    <button class="voice-play-btn" class:playing={voicePlaying} on:click={toggleVoice} title={voicePlaying ? '停止' : '试听'}>
+                      {#if voicePlaying}
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="4" height="10" rx="1"/><rect x="9" y="3" width="4" height="10" rx="1"/></svg>
+                      {:else}
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg>
+                      {/if}
+                      <span>{voicePlaying ? '停止' : '试听'}</span>
+                    </button>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+            {#if selectedRef?.note}<div class="preview-row"><span>参考说明</span><p>{selectedRef.note}</p></div>{/if}
+            <div class="preview-row"><span>资产类型</span><p>{getAssetTypeLabel(detailAsset.type)}</p></div>
+            <div class="preview-row"><span>参考数量</span><p>{detailRefs.length} 张</p></div>
           {/if}
-          {#if selectedRef?.note}<div class="preview-row"><span>参考说明</span><p>{selectedRef.note}</p></div>{/if}
-          <div class="preview-row"><span>资产类型</span><p>{getAssetTypeLabel(detailAsset.type)}</p></div>
-          <div class="preview-row"><span>参考数量</span><p>{detailRefs.length} 张</p></div>
         </div>
       </div>
     </div>
