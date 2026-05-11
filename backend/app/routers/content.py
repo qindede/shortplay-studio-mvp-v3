@@ -509,6 +509,19 @@ def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends
     return update(mutate)
 
 
+@router.delete("/video-versions/{version_id}")
+def delete_video_version(version_id: str, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        version = next((v for v in data["video_versions"] if v["id"] == version_id), None)
+        if not version:
+            raise HTTPException(status_code=404, detail="版本不存在")
+        verify_project_ownership(data, version["project_id"], user["id"])
+        data["video_versions"] = [v for v in data["video_versions"] if v["id"] != version_id]
+        return {"ok": True}
+
+    return update(mutate)
+
+
 @router.get("/projects/{project_id}/video-versions")
 def list_video_versions(project_id: str, episode_id: str | None = None, user: dict = Depends(get_current_user)):
     data = snapshot()

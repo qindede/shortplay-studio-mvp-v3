@@ -788,6 +788,21 @@
       assets = assets.filter((a) => a.id !== asset.id);
     });
   }
+
+  async function deleteVersion(version: VideoVersion) {
+    const confirmed = await requestDeleteConfirmation({
+      title: '删除版本',
+      message: `确定删除「${version.name}」吗？`,
+      detail: '此操作不可恢复。',
+      confirmText: '确认删除'
+    });
+    if (!confirmed) return;
+
+    await safeRun(async () => {
+      await api.deleteVersion(version.id);
+      versions = versions.filter((v) => v.id !== version.id);
+    });
+  }
 </script>
 
 {#if !currentUser}
@@ -857,7 +872,7 @@
           {/if}
 
           {#if activePage === 'video'}
-            <VideoPage {selectedEpisode} {shots} {videoTasks} {versions} {composeVideo} {regenerateVideo} />
+            <VideoPage {selectedEpisode} {shots} {videoTasks} {versions} {composeVideo} {regenerateVideo} on:deleteVersion={(e) => deleteVersion(e.detail)} />
           {/if}
 
           {#if activePage === 'account'}

@@ -286,6 +286,8 @@ export const api = {
   },
   versions: (projectId: string, episodeId?: string) =>
     request<VideoVersion[]>(`/api/projects/${projectId}/video-versions${episodeId ? `?episode_id=${episodeId}` : ''}`),
+  deleteVersion: (versionId: string) =>
+    request<{ ok: boolean }>(`/api/video-versions/${versionId}`, { method: 'DELETE' }),
   compose: (episodeId: string, body: { name?: string; description?: string; ratio?: string; duration?: number }) =>
     request<VideoVersion>(`/api/episodes/${episodeId}/compose`, { method: 'POST', body: JSON.stringify(body) }),
   usage: () => request<Usage>('/api/usage'),

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import type { Episode, Shot, VideoTask, VideoVersion } from '$lib/api';
   import { getStatusClass, getStatusLabel } from '$lib/workspace/ui';
 
@@ -8,6 +9,8 @@
   export let versions: VideoVersion[] = [];
   export let composeVideo: () => void | Promise<void>;
   export let regenerateVideo: (shotId: string) => void | Promise<void>;
+
+  const dispatch = createEventDispatcher<{ deleteVersion: VideoVersion }>();
 
   type PreviewTarget = {
     title: string;
@@ -128,6 +131,16 @@
             <button class="video-card video-card-button" on:click={() => openVersionPreview(version)}>
               <div class={'video-thumb ' + version.theme}><div class="play"></div></div>
               <div class="video-body"><div class="video-name">{version.name}</div><div class="video-desc">{version.description} / {version.ratio}</div></div>
+              <div class="project-card-actions">
+                <span
+                  class="project-action-btn project-action-danger"
+                  role="button"
+                  tabindex="0"
+                  aria-label={`删除 ${version.name}`}
+                  on:click|stopPropagation={() => dispatch('deleteVersion', version)}
+                  on:keydown|stopPropagation={(e) => e.key === 'Enter' && dispatch('deleteVersion', version)}
+                >删除</span>
+              </div>
             </button>
           {:else}
             <div class="empty-card"><div><b>暂无成片版本</b><span>合成后会在这里展示不同版本。</span></div></div>
