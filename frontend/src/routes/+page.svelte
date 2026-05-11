@@ -956,11 +956,13 @@
                 bind:value={projectDescription}
                 placeholder="写清主角、核心冲突、爽点或反转。"
               ></textarea>
-              <PromptOptimizeButton
-                value={projectDescription}
-                context="project_description"
-                onOptimized={(v) => (projectDescription = v)}
-              />
+              {#if !editingProject}
+                <PromptOptimizeButton
+                  value={projectDescription}
+                  context="project_description"
+                  onOptimized={(v) => (projectDescription = v)}
+                />
+              {/if}
             </div>
           </div>
 
