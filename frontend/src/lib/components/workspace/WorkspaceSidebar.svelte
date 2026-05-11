@@ -6,6 +6,7 @@
   import Images from 'lucide-svelte/icons/images';
   import KeyRound from 'lucide-svelte/icons/key-round';
   import LibraryBig from 'lucide-svelte/icons/library-big';
+  import UserIcon from 'lucide-svelte/icons/user';
   import WalletCards from 'lucide-svelte/icons/wallet-cards';
 
   export let activePage: PageKey;
@@ -112,7 +113,7 @@
       </div>
 
       <div class="sidebar-user-row">
-        <div class="sidebar-user-avatar">{currentUser.display_name.slice(0, 1)}</div>
+        <div class="sidebar-user-avatar"><UserIcon size={18} strokeWidth={2} /></div>
         <div class="sidebar-user-copy">
           <b>{currentUser.display_name}</b>
           <span>@{currentUser.username}</span>

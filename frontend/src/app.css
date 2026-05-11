@@ -199,24 +199,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   overflow: hidden;
   flex: 0 0 auto;
 }
-.project-cover-mini:after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 9px;
-  height: 5px;
-  border-radius: 99px;
-  background: rgba(255,255,255,0.74);
-  box-shadow: 0 -12px 0 rgba(255,255,255,0.28);
-}
 .project-cover-mini-img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.6;
   z-index: 0;
 }
 .switcher-name { flex: 1; min-width: 0; }
