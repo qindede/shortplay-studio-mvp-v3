@@ -52,7 +52,11 @@
     </div>
 
     <div class="switcher-main">
-      <div class="project-cover-mini"></div>
+      <div class="project-cover-mini">
+        {#if currentProject?.cover_image}
+          <img class="project-cover-mini-img" src={currentProject.cover_image} alt={currentProject.short_name} />
+        {/if}
+      </div>
       <div class="switcher-name">
         <b>{currentProject?.short_name || '未选择项目'}</b>
         <span>{episodes.length} 集 · {currentProject ? getStatusLabel(currentProject.status) : '等待开始'}</span>

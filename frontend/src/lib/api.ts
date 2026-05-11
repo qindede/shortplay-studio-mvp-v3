@@ -123,6 +123,7 @@ export interface Project {
   owner: string;
   owner_user_id: string;
   cover: string;
+  cover_image?: string;
   updated_at: string;
   episode_count: number;
   asset_count: number;
@@ -181,6 +182,7 @@ export interface Asset {
   description: string;
   ref_count: number;
   initial: string;
+  image?: string;
   updated_at: string;
 }
 

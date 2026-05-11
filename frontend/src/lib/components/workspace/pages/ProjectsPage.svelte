@@ -68,6 +68,9 @@
         <div class="project-card">
           <button class="project-card-select" on:click={() => selectProject(project)}>
           <div class={'project-cover ' + project.cover}>
+            {#if project.cover_image}
+              <img class="project-cover-img" src={project.cover_image} alt={project.short_name} />
+            {/if}
             <span>{project.short_name}</span>
           </div>
           <div class="project-card-body">

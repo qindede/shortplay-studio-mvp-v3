@@ -30,7 +30,9 @@
       {#each filteredAssets as asset}
         <div class="asset-card">
           <div class={'asset-preview ' + (asset.type === 'scene' ? 'scene' : asset.type === 'audio' ? 'audio' : 'person')}>
-            {#if asset.type !== 'scene'}
+            {#if asset.image}
+              <img class="asset-image" src={asset.image} alt={asset.name} />
+            {:else if asset.type !== 'scene'}
               <div class="portrait">{asset.initial}</div>
             {/if}
           </div>
