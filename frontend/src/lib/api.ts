@@ -262,8 +262,24 @@ export const api = {
   generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
   videoTasks: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/video-tasks`),
   assets: (projectId: string, type?: string) => request<Asset[]>(`/api/projects/${projectId}/assets${type ? `?type=${type}` : ''}`),
-  createAsset: (projectId: string, body: { type: string; name: string; description: string; initial: string }) =>
+  createAsset: (projectId: string, body: { type: string; name: string; description: string; initial: string; image?: string; references?: { type: string; name: string; url?: string; note?: string }[] }) =>
     request<Asset>(`/api/projects/${projectId}/assets`, { method: 'POST', body: JSON.stringify(body) }),
+  generateAsset: (projectId: string, body: { type: string; name: string; description: string; prompt: string }) =>
+    request<Asset>(`/api/projects/${projectId}/assets/generate`, { method: 'POST', body: JSON.stringify(body) }),
+  upload: async (file: File): Promise<{ url: string }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await fetch(`${API_BASE}/api/upload`, {
+      method: 'POST',
+      headers: { ...(authToken ? { 'X-User-Token': authToken } : {}) },
+      body: form
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Upload failed: ${response.status}`);
+    }
+    return response.json();
+  },
   versions: (projectId: string, episodeId?: string) =>
     request<VideoVersion[]>(`/api/projects/${projectId}/video-versions${episodeId ? `?episode_id=${episodeId}` : ''}`),
   compose: (episodeId: string, body: { name?: string; description?: string; ratio?: string; duration?: number }) =>

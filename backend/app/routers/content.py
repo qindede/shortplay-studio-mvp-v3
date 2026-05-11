@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..config import POINT_RULES
 from ..schemas import (
     AssetCreate,
+    AssetGenerate,
     ComposeRequest,
     EpisodeCreate,
     EpisodeUpdate,
@@ -404,15 +405,77 @@ def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get
         change_points(data, user["id"], -cost, "consume", scene, f"创建素材《{payload.name}》")
 
         ts = now()
+        references = []
+        if payload.references:
+            for i, ref in enumerate(payload.references):
+                references.append({
+                    "id": uid("ref"),
+                    "type": ref.get("type", "image"),
+                    "name": ref.get("name", f"参考 {i + 1:02d}"),
+                    "url": ref.get("url"),
+                    "note": ref.get("note"),
+                })
+
         asset = {
             "id": uid("asset"),
             "project_id": project_id,
             "type": payload.type,
             "name": payload.name,
             "description": payload.description,
-            "ref_count": 0,
+            "ref_count": len(references),
             "initial": payload.initial[:1] or payload.name[:1],
-            "references": [],
+            "image": payload.image,
+            "references": references,
+            "updated_at": ts,
+        }
+        data["assets"].insert(0, asset)
+        if visual_asset:
+            user_usage = get_user_usage(data, user["id"])
+            user_usage["image_used"] = min(user_usage["image_total"], user_usage["image_used"] + 1)
+        touch_project(data, project_id, ts)
+        return asset
+
+    return update(mutate)
+
+
+PLACEHOLDER_IMAGES = {
+    "character": "/portraits/placeholder_character.jpg",
+    "scene": "/portraits/placeholder_scene.jpg",
+    "image": "/portraits/placeholder_image.jpg",
+    "audio": "/portraits/placeholder_audio.jpg",
+}
+
+
+@router.post("/projects/{project_id}/assets/generate")
+def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        verify_project_ownership(data, project_id, user["id"])
+        visual_asset = payload.type in {"character", "scene", "image"}
+        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
+        scene = "AI 生成视觉素材" if visual_asset else "AI 生成音频素材"
+        change_points(data, user["id"], -cost, "consume", scene, f"AI 生成素材《{payload.name}》")
+
+        ts = now()
+        image_url = PLACEHOLDER_IMAGES.get(payload.type, "/portraits/placeholder_character.jpg")
+
+        references = [{
+            "id": uid("ref"),
+            "type": "image" if visual_asset else "audio",
+            "name": f"AI 生成 - {payload.name}",
+            "url": image_url,
+            "note": payload.prompt,
+        }]
+
+        asset = {
+            "id": uid("asset"),
+            "project_id": project_id,
+            "type": payload.type,
+            "name": payload.name,
+            "description": payload.description,
+            "ref_count": 1,
+            "initial": payload.name[:1],
+            "image": image_url,
+            "references": references,
             "updated_at": ts,
         }
         data["assets"].insert(0, asset)

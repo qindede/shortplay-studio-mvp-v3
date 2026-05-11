@@ -11,6 +11,8 @@ from typing import Any
 from uuid import uuid4
 
 DATA_PATH = Path(os.getenv("SHORTPLAY_DB", Path(__file__).resolve().parent.parent / "data" / "db.json"))
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
 _LOCK = threading.Lock()
 AUTH_SECRET = os.getenv("SHORTPLAY_AUTH_SECRET", "shortplay-mvp-secret")
 

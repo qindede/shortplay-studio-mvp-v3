@@ -74,6 +74,15 @@ class AssetCreate(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
     initial: str = "素"
+    image: str | None = None
+    references: list[dict] | None = None
+
+
+class AssetGenerate(BaseModel):
+    type: str = Field(pattern="^(character|scene|image|audio)$")
+    name: str = Field(min_length=1)
+    description: str = ""
+    prompt: str = Field(min_length=1)
 
 
 class ShotCreate(BaseModel):

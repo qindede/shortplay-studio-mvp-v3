@@ -1,0 +1,263 @@
+<script lang="ts">
+  import type { Asset } from '$lib/api';
+  import { api } from '$lib/api';
+
+  export let show = false;
+  export let projectId: string;
+  export let pointBalance = 0;
+  export let onCreate: (asset: Asset) => void;
+  export let onClose: () => void;
+
+  $: aiCost = type === 'audio' ? 5 : 20;
+
+  let mode: 'upload' | 'ai' = 'upload';
+  let type: Asset['type'] = 'character';
+  let name = '';
+  let description = '';
+  let files: File[] = [];
+  let previewUrls: string[] = [];
+  let mainIndex = 0;
+  let aiPrompt = '';
+  let generating = false;
+  let submitting = false;
+  let error = '';
+
+  const typeOptions: { value: Asset['type']; label: string }[] = [
+    { value: 'character', label: '角色' },
+    { value: 'scene', label: '场景' },
+    { value: 'image', label: '图片' },
+    { value: 'audio', label: '声音' }
+  ];
+
+  function reset() {
+    mode = 'upload';
+    type = 'character';
+    name = '';
+    description = '';
+    files = [];
+    previewUrls = [];
+    mainIndex = 0;
+    aiPrompt = '';
+    generating = false;
+    submitting = false;
+    error = '';
+  }
+
+  function handleClose() {
+    reset();
+    onClose();
+  }
+
+  function handleFileSelect(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    addFiles(Array.from(input.files));
+    input.value = '';
+  }
+
+  function addFiles(newFiles: File[]) {
+    for (const f of newFiles) {
+      files = [...files, f];
+      const url = URL.createObjectURL(f);
+      previewUrls = [...previewUrls, url];
+    }
+  }
+
+  function removeFile(index: number) {
+    URL.revokeObjectURL(previewUrls[index]);
+    files = files.filter((_, i) => i !== index);
+    previewUrls = previewUrls.filter((_, i) => i !== index);
+    if (mainIndex >= files.length) mainIndex = Math.max(0, files.length - 1);
+  }
+
+  function setMain(index: number) {
+    mainIndex = index;
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    const dropped = Array.from(e.dataTransfer?.files || []);
+    if (dropped.length) addFiles(dropped);
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+  }
+
+  async function handleSubmit() {
+    if (!name.trim()) { error = '请输入素材名称'; return; }
+    error = '';
+
+    if (mode === 'upload') {
+      await submitUpload();
+    } else {
+      await submitAiGenerate();
+    }
+  }
+
+  async function submitUpload() {
+    submitting = true;
+    try {
+      let imageUrl: string | undefined;
+      const refs: { type: string; name: string; url?: string }[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const result = await api.upload(files[i]);
+        const ref = { type: 'image', name: `参考 ${String(i + 1).padStart(2, '0')}`, url: result.url };
+        refs.push(ref);
+        if (i === mainIndex) imageUrl = result.url;
+      }
+
+      const asset = await api.createAsset(projectId, {
+        type,
+        name: name.trim(),
+        description: description.trim(),
+        initial: name.trim().slice(0, 1),
+        image: imageUrl,
+        references: refs.length ? refs : undefined
+      });
+
+      onCreate(asset);
+      reset();
+    } catch (e: any) {
+      error = e.message || '上传失败';
+    } finally {
+      submitting = false;
+    }
+  }
+
+  async function submitAiGenerate() {
+    if (!aiPrompt.trim()) { error = '请输入生成描述'; return; }
+    generating = true;
+    error = '';
+    try {
+      const asset = await api.generateAsset(projectId, {
+        type,
+        name: name.trim(),
+        description: description.trim(),
+        prompt: aiPrompt.trim()
+      });
+      onCreate(asset);
+      reset();
+    } catch (e: any) {
+      error = e.message || '生成失败';
+    } finally {
+      generating = false;
+    }
+  }
+</script>
+
+{#if show}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" role="presentation" on:click={handleClose}>
+    <div class="modal-panel create-asset-modal" role="dialog" aria-modal="true" aria-labelledby="create-asset-title" tabindex="-1" on:click|stopPropagation>
+      <div class="modal-head">
+        <div>
+          <div class="modal-title-accent" id="create-asset-title">新建素材</div>
+          <div class="panel-subtitle">上传参考图或使用 AI 生成角色与场景素材。</div>
+        </div>
+        <button class="modal-close" aria-label="关闭" on:click={handleClose}>×</button>
+      </div>
+
+      <div class="modal-body create-asset-body">
+        {#if error}<div class="error compact-alert">{error}</div>{/if}
+
+        <div class="create-asset-tabs">
+          <button class:active={mode === 'upload'} on:click={() => (mode = 'upload')}>手动上传</button>
+          <button class:active={mode === 'ai'} on:click={() => (mode = 'ai')}>AI 生成</button>
+        </div>
+
+        <div class="field-grid">
+          <div class="field">
+            <label for="asset-type">素材类型</label>
+            <select id="asset-type" bind:value={type}>
+              {#each typeOptions as opt}
+                <option value={opt.value}>{opt.label}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="field">
+            <label for="asset-name">素材名称</label>
+            <input id="asset-name" bind:value={name} placeholder={type === 'scene' ? '如：宴会厅' : type === 'character' ? '如：林晚' : '素材名称'} />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="asset-desc">素材描述</label>
+          <input id="asset-desc" bind:value={description} placeholder="简要描述素材的外观、特征或用途" />
+        </div>
+
+        {#if mode === 'upload'}
+          <div
+            class="upload-zone"
+            role="button"
+            tabindex="0"
+            on:drop={handleDrop}
+            on:dragover={handleDragOver}
+            on:click={() => document.getElementById('asset-file-input')?.click()}
+            on:keydown={(e) => e.key === 'Enter' && document.getElementById('asset-file-input')?.click()}
+          >
+            <input
+              id="asset-file-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              hidden
+              on:change={handleFileSelect}
+            />
+            <div class="upload-zone-text">
+              <span class="upload-icon">+</span>
+              <span>拖拽或点击上传参考图</span>
+              <span class="upload-hint">支持 JPG / PNG / WebP，可多选</span>
+            </div>
+          </div>
+
+          {#if previewUrls.length > 0}
+            <div class="upload-thumbs">
+              {#each previewUrls as url, i}
+                <div class="upload-thumb" class:is-main={i === mainIndex}>
+                  <img src={url} alt="参考 {i + 1}" />
+                  <div class="upload-thumb-actions">
+                    <button class="thumb-main-btn" title="设为主图" on:click|stopPropagation={() => setMain(i)}>
+                      {i === mainIndex ? '★ 主图' : '☆'}
+                    </button>
+                    <button class="thumb-remove-btn" title="移除" on:click|stopPropagation={() => removeFile(i)}>×</button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {:else}
+          <div class="field">
+            <label for="asset-ai-prompt">生成描述</label>
+            <textarea
+              id="asset-ai-prompt"
+              bind:value={aiPrompt}
+              placeholder={type === 'character'
+                ? '如：一个穿黑色西装的年轻男性，冷峻面容，短发，站在落地窗前'
+                : type === 'scene'
+                  ? '如：现代风格的豪华宴会厅，水晶吊灯，金色装饰，舞池中央'
+                  : '描述你想要生成的素材外观'}
+            ></textarea>
+          </div>
+        {/if}
+      </div>
+
+      <div class="modal-actions">
+        {#if mode === 'ai' && pointBalance < aiCost}
+          <div class="inline-hint warn">当前积分 {pointBalance}，不足以生成素材。</div>
+        {/if}
+        <button class="btn btn-secondary" on:click={handleClose}>取消</button>
+        <button class="btn btn-primary" disabled={submitting || generating || (mode === 'ai' && pointBalance < aiCost)} on:click={handleSubmit}>
+          {#if generating}
+            生成中...
+          {:else if submitting}
+            创建中...
+          {:else}
+            {mode === 'ai' ? `生成并创建（ ${aiCost} 积分 ）` : '创建素材'}
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

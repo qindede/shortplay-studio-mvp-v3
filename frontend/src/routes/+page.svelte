@@ -32,6 +32,7 @@
   import VideoPage from '$lib/components/workspace/pages/VideoPage.svelte';
   import { type AuthMode, type PageKey } from '$lib/workspace/ui';
   import ConfirmDialog from '$lib/components/workspace/ConfirmDialog.svelte';
+  import CreateAssetModal from '$lib/components/workspace/pages/CreateAssetModal.svelte';
 
   type AssetFilter = 'all' | Asset['type'];
   type DeleteConfirmState = {
@@ -87,6 +88,7 @@
   let projectSubmitting = false;
   let projectFormError = '';
   let deleteConfirm: DeleteConfirmState | null = null;
+  let showCreateAssetModal = false;
 
   const assetTypes: Asset['type'][] = ['character', 'scene', 'image', 'audio'];
 
@@ -749,25 +751,14 @@
   }
 
   async function createAsset() {
-    const project = currentProject;
-    if (!project) return;
+    if (!currentProject) return;
+    showCreateAssetModal = true;
+  }
 
-    await safeRun(async () => {
-      const input = prompt('素材类型：character / scene / image / audio', 'character') || 'character';
-      if (!assetTypes.includes(input as Asset['type'])) {
-        alert('素材类型只能是 character / scene / image / audio');
-        return;
-      }
-
-      const type = input as Asset['type'];
-      const name = prompt('素材名称', type === 'scene' ? '新场景' : '新角色');
-      if (!name) return;
-
-      const description = prompt('素材描述', '请输入素材描述') || '';
-      await api.createAsset(project.id, { type, name, description, initial: name.slice(0, 1) });
-      assets = await api.assets(project.id);
-      await refreshDashboard();
-    });
+  function handleAssetCreated(asset: Asset) {
+    assets = [asset, ...assets];
+    showCreateAssetModal = false;
+    refreshDashboard();
   }
 </script>
 
@@ -1015,5 +1006,15 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#if currentProject}
+    <CreateAssetModal
+      show={showCreateAssetModal}
+      projectId={currentProject.id}
+      {pointBalance}
+      onCreate={handleAssetCreated}
+      onClose={() => (showCreateAssetModal = false)}
+    />
   {/if}
 {/if}
