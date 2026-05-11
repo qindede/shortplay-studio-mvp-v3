@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #090a0f;
   --bg-soft: #0e1017;
   --surface: rgba(255, 255, 255, 0.065);
@@ -1184,7 +1184,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
-.field { margin-bottom: 12px; }
 .field label {
   display: block;
   color: var(--text-soft);
@@ -1896,6 +1895,9 @@ textarea {
 .modal-body {
   padding: 18px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .project-description-input {
   min-height: 104px;
@@ -2020,7 +2022,7 @@ textarea {
   color: #f87171;
 }
 .create-asset-body textarea {
-  min-height: 80px;
+  min-height: 124px;
   resize: vertical;
 }
 .outline-toolbar {
