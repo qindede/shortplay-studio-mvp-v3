@@ -1447,12 +1447,14 @@ textarea {
 }
 .video-preview-modal {
   width: min(920px, 100%);
+  max-height: min(90vh, calc(100vh - 44px));
 }
-.video-preview-body {
+.modal-body.video-preview-body {
   display: grid;
   grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
+  overflow-y: auto;
 }
 .preview-stage {
   width: 100%;
@@ -2414,7 +2416,7 @@ textarea {
   .asset-detail-placeholder {
     min-height: 360px;
   }
-  .video-preview-body {
+  .modal-body.video-preview-body {
     grid-template-columns: 1fr;
   }
   .preview-video,
