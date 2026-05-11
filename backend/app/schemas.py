@@ -48,6 +48,12 @@ class ProjectCreate(BaseModel):
     episodes: list[EpisodeDraft] = Field(default_factory=list)
 
 
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    status: str | None = Field(default=None, pattern="^(active|review|draft|completed)$")
+
+
 class EpisodeCreate(BaseModel):
     title: str = Field(min_length=1)
     summary: str = ""

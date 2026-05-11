@@ -9,6 +9,8 @@
   export let setPage: (page: PageKey) => void | Promise<void>;
   export let selectProject: (project: Project, goEpisodes?: boolean) => void | Promise<void>;
   export let createProject: () => void | Promise<void>;
+  export let editProject: (project: Project) => void | Promise<void>;
+  export let deleteProject: (project: Project) => void | Promise<void>;
 </script>
 
 <div class="hero-board">
@@ -63,7 +65,8 @@
   <div class="panel-body">
     <div class="project-grid">
       {#each projects as project}
-        <button class="project-card" on:click={() => selectProject(project)}>
+        <div class="project-card">
+          <button class="project-card-select" on:click={() => selectProject(project)}>
           <div class={'project-cover ' + project.cover}>
             <span>{project.short_name}</span>
           </div>
@@ -76,7 +79,12 @@
               <span class={'status ' + getStatusClass(project.status)}>{getStatusLabel(project.status)}</span>
             </div>
           </div>
-        </button>
+          </button>
+          <div class="project-card-actions">
+            <button class="project-action-btn" aria-label={`编辑 ${project.name}`} on:click={() => editProject(project)}>编辑</button>
+            <button class="project-action-btn project-action-danger" aria-label={`删除 ${project.name}`} on:click={() => deleteProject(project)}>删除</button>
+          </div>
+        </div>
       {/each}
 
       <button class="empty-card" on:click={createProject}>

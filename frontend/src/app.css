@@ -836,6 +836,49 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   text-align: left;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+.project-card-select {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+.project-card-actions {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  gap: 6px;
+}
+.project-action-btn {
+  border: 1px solid rgba(255,255,255,0.24);
+  border-radius: 8px;
+  background: rgba(8,10,14,0.78);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+}
+.project-action-btn:hover {
+  border-color: var(--line-strong);
+  background: rgba(255,255,255,0.12);
+}
+.project-action-danger {
+  color: var(--red);
+}
+.project-action-danger:hover {
+  border-color: rgba(255,123,138,0.55);
+  background: rgba(255,123,138,0.16);
 }
 .project-card:hover,
 .asset-card:hover,
@@ -1673,6 +1716,9 @@ textarea {
 .modal-actions-split {
   justify-content: space-between;
 }
+.modal-actions-right-only {
+  justify-content: flex-end;
+}
 .modal-action-right {
   display: flex;
   justify-content: flex-end;
@@ -1921,4 +1967,18 @@ textarea {
   .auth-poster { display: none; }
   .top-actions .btn { flex: 1 1 auto; }
   .mobile-tabbar { grid-template-columns: repeat(3, 1fr); }
+}
+
+.modal-actions.modal-actions-right-only {
+  align-items: center;
+  flex-direction: row;
+  justify-content: flex-end;
+}
+.modal-actions-right-only .modal-action-right {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: auto;
+}
+.modal-actions-right-only .modal-action-right .btn {
+  flex: 0 0 auto;
 }

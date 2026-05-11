@@ -226,6 +226,10 @@ export const api = {
   projects: () => request<Project[]>('/api/projects'),
   createProject: (body: { name: string; description: string; owner?: string; episodes?: ProjectOutlineEpisode[] }) =>
     request<Project>('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
+  updateProject: (projectId: string, body: { name?: string; description?: string; status?: Status }) =>
+    request<Project>(`/api/projects/${projectId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteProject: (projectId: string) =>
+    request<{ ok: boolean }>(`/api/projects/${projectId}`, { method: 'DELETE' }),
   generateProjectOutline: (body: { name: string; description: string; episode_count?: number }) =>
     request<ProjectOutline>('/api/projects/generate-outline', { method: 'POST', body: JSON.stringify(body) }),
   episodes: (projectId: string) => request<Episode[]>(`/api/projects/${projectId}/episodes`),

@@ -77,6 +77,7 @@
   let newEpisodeScript = '';
   let newEpisodeDuration = 30;
   let projectDialogOpen = false;
+  let editingProject: Project | null = null;
   let projectName = '';
   let projectDescription = '';
   let outlineCost = 20;
@@ -123,6 +124,7 @@
   }
 
   function resetProjectForm() {
+    editingProject = null;
     projectName = '';
     projectDescription = '';
     outlineEpisodes = [];
@@ -133,6 +135,14 @@
 
   function openProjectDialog() {
     resetProjectForm();
+    projectDialogOpen = true;
+  }
+
+  function openProjectEditDialog(project: Project) {
+    resetProjectForm();
+    editingProject = project;
+    projectName = project.name;
+    projectDescription = project.description;
     projectDialogOpen = true;
   }
 
@@ -387,6 +397,10 @@
     openProjectDialog();
   }
 
+  function editProject(project: Project) {
+    openProjectEditDialog(project);
+  }
+
   async function generateProjectOutline() {
     const name = projectName.trim();
     const description = projectDescription.trim();
@@ -415,6 +429,7 @@
   }
 
   async function submitProject() {
+    const projectToEdit = editingProject;
     const name = projectName.trim();
     const description = projectDescription.trim();
     projectFormError = '';
@@ -427,6 +442,22 @@
 
     projectSubmitting = true;
     try {
+      if (projectToEdit) {
+        const project = await api.updateProject(projectToEdit.id, {
+          name,
+          description
+        });
+        projectDialogOpen = false;
+        resetProjectForm();
+        await refreshDashboard();
+        currentProject = projects.find((item) => item.id === project.id) || project;
+        if (currentProject.id === project.id) {
+          await selectProject(currentProject, false);
+        }
+        activePage = 'projects';
+        return;
+      }
+
       const project = await api.createProject({
         name,
         description,
@@ -440,6 +471,48 @@
       await selectProject(target);
     } catch (err) {
       projectFormError = err instanceof Error ? err.message : '创建项目失败';
+    } finally {
+      projectSubmitting = false;
+    }
+  }
+
+  async function deleteProject(projectToDelete: Project) {
+    if (!projectToDelete || projectSubmitting) return;
+
+    const confirmed = await requestDeleteConfirmation({
+      title: '删除项目',
+      message: `确定删除项目「${projectToDelete.name}」吗？`,
+      detail: '项目下的剧集、分镜、素材、视频任务和成片版本都会一并删除，此操作不可恢复。',
+      confirmText: '确认删除'
+    });
+    if (!confirmed) return;
+
+    projectSubmitting = true;
+    projectFormError = '';
+    error = '';
+    try {
+      await api.deleteProject(projectToDelete.id);
+      projectDialogOpen = false;
+      resetProjectForm();
+      await refreshDashboard();
+
+      if (projects.length === 0) {
+        currentProject = null;
+        episodes = [];
+        selectedEpisode = null;
+        shots = [];
+        assets = [];
+        videoTasks = [];
+        versions = [];
+        resetEpisodeForm();
+        activePage = 'projects';
+        return;
+      }
+
+      await selectProject(projects[0], false);
+      activePage = 'projects';
+    } catch (err) {
+      error = err instanceof Error ? err.message : '删除项目失败';
     } finally {
       projectSubmitting = false;
     }
@@ -733,7 +806,7 @@
           {#if error}<div class="error">{error}</div>{/if}
 
           {#if activePage === 'projects'}
-            <ProjectsPage {dashboard} {currentProject} {episodes} {projects} {setPage} {selectProject} {createProject} />
+            <ProjectsPage {dashboard} {currentProject} {episodes} {projects} {setPage} {selectProject} {createProject} {editProject} {deleteProject} />
           {/if}
 
           {#if activePage === 'episodes'}
@@ -836,7 +909,7 @@
           {/if}
         </div>
 
-        <div class="modal-actions modal-actions-split">
+        <div class="modal-actions modal-actions-split" class:modal-actions-right-only={editingProject}>
           <button
             class="btn btn-outline-generate"
             disabled={episodeSubmitting || pointBalance < storyboardCost}
@@ -861,8 +934,8 @@
       <div class="modal-panel project-create-modal" role="dialog" aria-modal="true" aria-labelledby="project-create-title">
         <div class="modal-head">
           <div>
-            <div class="modal-title-accent" id="project-create-title">新建短剧项目</div>
-            <div class="panel-subtitle">填写短剧名称和简介，可先生成剧集大纲，确认后再创建项目。</div>
+            <div class="modal-title-accent" id="project-create-title">{editingProject ? '编辑短剧项目' : '新建短剧项目'}</div>
+            <div class="panel-subtitle">{editingProject ? '更新短剧名称和简介，保存后会同步到项目中心。' : '填写短剧名称和简介，可先生成剧集大纲，确认后再创建项目。'}</div>
           </div>
           <button class="modal-close" aria-label="关闭" on:click={closeProjectDialog}>×</button>
         </div>
@@ -885,11 +958,11 @@
             ></textarea>
           </div>
 
-          {#if pointBalance < outlineCost}
+          {#if !editingProject && pointBalance < outlineCost}
             <div class="inline-hint warn">当前积分 {pointBalance}，不足以生成短剧大纲。</div>
           {/if}
 
-          {#if outlineEpisodes.length > 0}
+          {#if !editingProject && outlineEpisodes.length > 0}
             <div class="outline-preview">
               <div class="outline-preview-head">
                 <div>
@@ -922,19 +995,21 @@
           {/if}
         </div>
 
-        <div class="modal-actions modal-actions-split">
-          <button
-            class="btn btn-outline-generate"
-            disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}
-            on:click={generateProjectOutline}
-          >
-            {outlineLoading ? '生成中...' : `✨智能生成大纲（ ${outlineCost} 积分 ）`}
-          </button>
+        <div class="modal-actions" class:modal-actions-split={!editingProject} class:modal-actions-right-only={editingProject}>
+          {#if !editingProject}
+            <button
+              class="btn btn-outline-generate"
+              disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}
+              on:click={generateProjectOutline}
+            >
+              {outlineLoading ? '生成中...' : `✨智能生成大纲（ ${outlineCost} 积分 ）`}
+            </button>
+          {/if}
 
           <div class="modal-action-right">
             <button class="btn btn-secondary" disabled={outlineLoading || projectSubmitting} on:click={closeProjectDialog}>取消</button>
             <button class="btn btn-primary" disabled={outlineLoading || projectSubmitting} on:click={submitProject}>
-              {projectSubmitting ? '创建中...' : outlineEpisodes.length > 0 ? `确认创建项目和 ${outlineEpisodes.length} 集` : '确认创建项目'}
+              {projectSubmitting ? (editingProject ? '保存中...' : '创建中...') : editingProject ? '保存修改' : outlineEpisodes.length > 0 ? `确认创建项目和 ${outlineEpisodes.length} 集` : '确认创建项目'}
             </button>
           </div>
         </div>

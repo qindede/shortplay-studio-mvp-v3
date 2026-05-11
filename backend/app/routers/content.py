@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..config import POINT_RULES
 from ..schemas import (
@@ -11,6 +11,7 @@ from ..schemas import (
     OutlineGenerateRequest,
     OutlineGenerateResponse,
     ProjectCreate,
+    ProjectUpdate,
     ShotCreate,
     ShotUpdate,
 )
@@ -110,6 +111,49 @@ def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depen
 def get_project(project_id: str, user: dict = Depends(get_current_user)):
     data = snapshot()
     return enrich_project(data, verify_project_ownership(data, project_id, user["id"]))
+
+
+@router.put("/projects/{project_id}")
+def update_project(project_id: str, payload: ProjectUpdate, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        project = verify_project_ownership(data, project_id, user["id"])
+        updates = payload.model_dump(exclude_none=True)
+        if "name" in updates:
+            name = updates["name"].strip()
+            if not name:
+                raise HTTPException(status_code=422, detail="项目名称不能为空")
+            project["name"] = name
+            project["short_name"] = name[:8]
+        if "description" in updates:
+            project["description"] = updates["description"]
+        if "status" in updates:
+            project["status"] = updates["status"]
+        touch_project(data, project_id)
+        return enrich_project(data, project)
+
+    return update(mutate)
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: str, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        verify_project_ownership(data, project_id, user["id"])
+        episode_ids = {e["id"] for e in data["episodes"] if e["project_id"] == project_id}
+        shot_ids = {s["id"] for s in data["shots"] if s["episode_id"] in episode_ids}
+
+        data["projects"] = [p for p in data["projects"] if p["id"] != project_id]
+        data["episodes"] = [e for e in data["episodes"] if e["project_id"] != project_id]
+        data["shots"] = [s for s in data["shots"] if s["episode_id"] not in episode_ids]
+        data["assets"] = [a for a in data["assets"] if a["project_id"] != project_id]
+        data["video_tasks"] = [
+            t
+            for t in data["video_tasks"]
+            if t.get("episode_id") not in episode_ids and t.get("shot_id") not in shot_ids
+        ]
+        data["video_versions"] = [v for v in data["video_versions"] if v["project_id"] != project_id]
+        return {"ok": True}
+
+    return update(mutate)
 
 
 @router.get("/projects/{project_id}/episodes")
