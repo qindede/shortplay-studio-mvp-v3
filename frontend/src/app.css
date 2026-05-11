@@ -1945,7 +1945,6 @@ textarea {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding-bottom: 6px;
   min-height: 120px;
   align-items: stretch;
   cursor: pointer;
@@ -1988,11 +1987,9 @@ textarea {
   font-size: 12px;
   font-weight: 850;
 }
-.upload-hint-line {
-  color: var(--muted);
-  font-size: 12px;
-  opacity: 0.7;
-  margin-top: 6px;
+.upload-add-hint {
+  color: var(--faint);
+  font-size: 11px;
 }
 .upload-thumb {
   position: relative;
@@ -2060,7 +2057,7 @@ textarea {
   border-radius: 4px;
 }
 .create-asset-body textarea {
-  min-height: 124px;
+  min-height: 93px;
   resize: vertical;
 }
 .outline-toolbar {
