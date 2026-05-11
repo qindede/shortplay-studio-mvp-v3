@@ -654,6 +654,18 @@
     });
   }
 
+  async function regenerateVideo(shotId: string) {
+    const episode = selectedEpisode;
+    if (!episode) return;
+
+    await safeRun(async () => {
+      await api.generateShotVideo(shotId);
+      videoTasks = await api.videoTasks(episode.id);
+      shots = await api.shots(episode.id);
+      await refreshDashboard();
+    });
+  }
+
   async function generateVideosForEpisode(episode: Episode) {
     await safeRun(async () => {
       await runEpisodeVideoGeneration(episode);
@@ -804,7 +816,7 @@
     />
 
     <main class="main">
-      <WorkspaceTopbar {activePage} {setPage} {batchGenerateVideos} {refreshDashboard} {handleTopAction} />
+      <WorkspaceTopbar {activePage} {setPage} {refreshDashboard} {handleTopAction} />
 
       <div class="content">
         {#if loading}
@@ -845,7 +857,7 @@
           {/if}
 
           {#if activePage === 'video'}
-            <VideoPage {selectedEpisode} {shots} {videoTasks} {versions} {composeVideo} />
+            <VideoPage {selectedEpisode} {shots} {videoTasks} {versions} {composeVideo} {regenerateVideo} />
           {/if}
 
           {#if activePage === 'account'}

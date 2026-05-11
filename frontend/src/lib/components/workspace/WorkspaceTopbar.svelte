@@ -3,7 +3,6 @@
 
   export let activePage: PageKey;
   export let setPage: (page: PageKey) => void | Promise<void>;
-  export let batchGenerateVideos: () => void | Promise<void>;
   export let refreshDashboard: () => void | Promise<void>;
   export let handleTopAction: () => void | Promise<void>;
 
@@ -32,15 +31,11 @@
       <button class="btn btn-secondary" on:click={() => setPage('episodes')}>返回剧集</button>
     {/if}
 
-    {#if activePage === 'video'}
-      <button class="btn btn-secondary" on:click={batchGenerateVideos}>批量生成</button>
-    {/if}
-
     {#if activePage === 'account'}
       <button class="btn btn-secondary" on:click={refreshDashboard}>刷新额度</button>
     {/if}
 
-    {#if activePage !== 'account' && activePage !== 'password' && activePage !== 'script'}
+    {#if activePage !== 'account' && activePage !== 'password' && activePage !== 'script' && activePage !== 'video'}
       <button class="btn btn-primary" on:click={handleTopAction}>{currentMeta.actionLabel}</button>
     {/if}
   </div>

@@ -7,6 +7,7 @@
   export let videoTasks: VideoTask[] = [];
   export let versions: VideoVersion[] = [];
   export let composeVideo: () => void | Promise<void>;
+  export let regenerateVideo: (shotId: string) => void | Promise<void>;
 
   type PreviewTarget = {
     title: string;
@@ -102,6 +103,7 @@
                 <td>{task.updated_at}</td>
                 <td>
                   <button class="btn btn-text" disabled={!canPreviewTask(task)} on:click={() => openTaskPreview(task)}>预览</button>
+                  <button class="btn btn-text" on:click={() => regenerateVideo(task.shot_id)}>重新生成</button>
                 </td>
               </tr>
             {:else}
