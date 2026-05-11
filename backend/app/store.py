@@ -943,6 +943,40 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
         if "image" not in asset and asset["id"] in _asset_image_map:
             asset["image"] = _asset_image_map[asset["id"]]
             changed = True
+    # Migrate multi-reference assets for the detail gallery.
+    _asset_reference_sources = {
+        "asset_linwan": ["/portraits/linwan.jpg", "/images/poster.jpg", "/scenes/banquet.jpg"],
+        "asset_guchen": ["/portraits/guchen.jpg", "/scenes/banquet.jpg", "/scenes/office.jpg"],
+        "asset_suqing": ["/portraits/suqing.jpg", "/scenes/banquet.jpg", "/images/poster.jpg"],
+        "asset_banquet": ["/scenes/banquet.jpg", "/images/poster.jpg", "/scenes/villa.jpg"],
+        "asset_hospital": ["/scenes/hospital.jpg", "/portraits/bairuoxue.jpg", "/scenes/office.jpg"],
+        "asset_img_poster": ["/images/poster.jpg", "/portraits/linwan.jpg"],
+        "asset_bairuoxue": ["/portraits/bairuoxue.jpg", "/scenes/hospital.jpg", "/images/poster.jpg"],
+        "asset_lujiinian": ["/portraits/lujiinian.jpg", "/scenes/villa.jpg", "/scenes/office.jpg"],
+        "asset_zhouzixuan": ["/portraits/zhouzixuan.jpg", "/scenes/villa.jpg", "/images/poster.jpg"],
+        "asset_scene_hospital": ["/scenes/hospital.jpg", "/portraits/bairuoxue.jpg"],
+        "asset_scene_villa": ["/scenes/villa.jpg", "/portraits/lujiinian.jpg"],
+        "asset_scene_office": ["/scenes/office.jpg", "/scenes/rooftop.jpg"],
+        "asset_scene_rooftop": ["/scenes/rooftop.jpg", "/scenes/office.jpg"],
+    }
+    for asset in data.get("assets", []):
+        if "references" not in asset:
+            sources = _asset_reference_sources.get(asset["id"], [])
+            if sources:
+                asset["references"] = [
+                    {
+                        "id": f'{asset["id"]}_ref_{index + 1}',
+                        "type": "image",
+                        "name": f'参考图 {index + 1}',
+                        "url": source,
+                        "note": asset.get("description", ""),
+                    }
+                    for index, source in enumerate(sources)
+                ]
+                asset["ref_count"] = max(int(asset.get("ref_count", 0)), len(sources))
+            else:
+                asset["references"] = []
+            changed = True
     if "users" not in data:
         data["users"] = default_users()
         changed = True

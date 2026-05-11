@@ -412,6 +412,7 @@ def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get
             "description": payload.description,
             "ref_count": 0,
             "initial": payload.initial[:1] or payload.name[:1],
+            "references": [],
             "updated_at": ts,
         }
         data["assets"].insert(0, asset)

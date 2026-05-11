@@ -183,7 +183,16 @@ export interface Asset {
   ref_count: number;
   initial: string;
   image?: string;
+  references?: AssetReference[];
   updated_at: string;
+}
+
+export interface AssetReference {
+  id: string;
+  type: 'image' | 'audio' | 'video' | 'text';
+  name: string;
+  url?: string;
+  note?: string;
 }
 
 export interface VideoTask {
