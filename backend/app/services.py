@@ -229,82 +229,67 @@ def optimize_prompt(prompt: str, context: str) -> str:
         return text
 
     if context == "asset_character":
-        parts = [text]
-        visual_keywords = [
-            "面部表情", "发型", "服装细节", "配饰", "体态",
-            "光影效果", "背景氛围", "色调", "镜头角度",
-        ]
-        missing = [k for k in visual_keywords if k not in text]
-        if len(text) < 30 and missing:
-            parts.append(f"。注意刻画{'、'.join(missing[:3])}，画面精细度高，8K画质")
-        if "风格" not in text and "画风" not in text:
-            parts.append("，写实风格，电影级光影")
-        return "".join(parts)
+        return (
+            f"{text}，冷峻面容，短发利落，棱角分明的下颌线，深邃眼神，"
+            f"姿态挺拔，双手自然垂落，侧面轮廓光勾勒出肩线与衣褶细节，"
+            f"背景为柔和的暗色调虚化，暖色主光从右上方45°打入，"
+            f"写实风格，电影级光影，8K画质，超高清晰度"
+        )
 
     if context == "asset_scene":
-        parts = [text]
-        scene_keywords = [
-            "光线", "色调", "空间感", "材质", "氛围",
-            "前景", "背景", "透视", "细节",
-        ]
-        missing = [k for k in scene_keywords if k not in text]
-        if len(text) < 30 and missing:
-            parts.append(f"。注意表现{'、'.join(missing[:3])}，空间层次分明")
-        if "风格" not in text and "画风" not in text:
-            parts.append("，超高清渲染，电影级场景美术")
-        return "".join(parts)
+        return (
+            f"{text}，水晶吊灯散发柔和暖光，金色装饰线条勾勒墙面细节，"
+            f"大理石地面反射出灯光倒影，前景布置精致花艺装置，"
+            f"背景落地窗外映出城市夜景天际线，空间纵深层次分明，"
+            f"主色调为暖金与深棕，气氛奢华而内敛，"
+            f"超高清渲染，电影级场景美术，16:9宽幅构图"
+        )
 
     if context == "asset_image":
-        parts = [text]
-        if len(text) < 25:
-            parts.append("。画面构图讲究，色彩协调，高清细节")
-        if "风格" not in text:
-            parts.append("，专业美术品质")
-        return "".join(parts)
+        return (
+            f"{text}，画面构图遵循三分法，主体居中偏左，"
+            f"前景与背景形成自然景深过渡，色调统一和谐，"
+            f"主光源从侧面打入形成明暗对比，细节纹理清晰可见，"
+            f"专业美术品质，高清渲染，适合短剧海报与宣传素材"
+        )
 
     if context == "asset_audio":
-        parts = [text]
-        if len(text) < 20:
-            parts.append("。音质清晰，节奏合适，情绪到位")
-        return "".join(parts)
+        return (
+            f"{text}，音质清晰无杂音，节奏适中，"
+            f"情绪递进自然，前奏轻柔引入，中段饱满有力，尾奏渐弱收束，"
+            f"适合30秒短视频循环使用，混音层次分明"
+        )
 
     if context == "project_description":
         parts = [text]
-        story_elements = [
-            "主角", "冲突", "反转", "爽点", "悬念", "情感",
-        ]
-        missing = [k for k in story_elements if k not in text]
-        if len(text) < 40 and missing:
-            parts.append(f"。建议补充{'、'.join(missing[:2])}等要素，让故事更饱满")
-        if "集" not in text and "季" not in text:
-            parts.append("，节奏紧凑，适合短剧分集呈现")
+        if "主角" not in text and "她" not in text and "他" not in text:
+            parts.insert(0, "以一位年轻女性为主角，")
+        if "冲突" not in text and "矛盾" not in text:
+            parts.append("核心冲突围绕身份误解与情感背叛展开。")
+        if "反转" not in text:
+            parts.append("剧情在关键时刻出现身份反转，制造强烈爽感。")
+        if "集" not in text:
+            parts.append("全剧节奏紧凑，每集30秒，悬念层层递进，适合短剧分集呈现。")
         return "".join(parts)
 
     if context == "episode_script":
-        parts = [text]
-        script_elements = [
-            "开场", "冲突", "对白", "反转", "悬念", "高潮",
-        ]
-        missing = [k for k in script_elements if k not in text]
-        if len(text) < 60 and missing:
-            parts.append(f"\n\n建议补充：{'、'.join(missing[:3])}，增强叙事张力。")
-        if "秒" not in text and "镜头" not in text:
-            parts.append("每个关键情节点用画面+对白组合推进。")
+        parts = []
+        if "开场" not in text and text[:10]:
+            parts.append(f"【开场】{text[:20]}...场景切入，用3秒建立冲突。")
+        parts.append(f"\n\n【正文】{text}")
+        if "悬念" not in text and "结尾" not in text:
+            parts.append("\n\n【结尾悬念】关键信息被揭露但真相未完全浮出，为下一集留下钩子。")
         return "".join(parts)
 
     if context == "shot_visual":
-        parts = [text]
-        visual_elements = [
-            "镜头", "光线", "色彩", "构图", "景深", "运动",
-        ]
-        missing = [k for k in visual_elements if k not in text]
-        if len(text) < 25 and missing:
-            parts.append(f"。{'、'.join(missing[:2])}到位，画面质感强")
-        if "风格" not in text:
-            parts.append("，电影级画面")
-        return "".join(parts)
+        return (
+            f"{text}，中景镜头，主体居中，"
+            f"暖色侧光打出面部与衣物的明暗层次，"
+            f"背景虚化处理突出人物，景深过渡自然，"
+            f"色调偏暖棕，画面质感强烈，电影级画面，4K超清"
+        )
 
     # general context
-    if len(text) < 20:
-        return text + "。请提供更详细的描述以获得更好的生成效果。"
+    if len(text) < 30:
+        return f"{text}，画面精细度高，色调统一，构图讲究，超高清渲染，专业美术品质"
     return text
