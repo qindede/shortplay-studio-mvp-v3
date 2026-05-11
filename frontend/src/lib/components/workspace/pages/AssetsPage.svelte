@@ -74,32 +74,33 @@
   <div class="panel-body">
     <div class="asset-grid">
       {#each filteredAssets as asset}
-        <div class="asset-card-wrapper">
-          <button class="asset-card asset-card-button" on:click={() => openAssetDetail(asset)}>
-            <div class={'asset-preview ' + getAssetPreviewClass(asset)}>
-              {#if asset.image}
-                <img class="asset-image" src={asset.image} alt={asset.name} />
-              {:else if asset.type !== 'scene'}
-                <div class="portrait">{asset.initial}</div>
-              {/if}
-              {#if getAssetReferences(asset).length > 1}
-                <div class="asset-ref-badge">{getAssetReferences(asset).length} 张</div>
-              {/if}
-            </div>
+        <button class="asset-card asset-card-button" on:click={() => openAssetDetail(asset)}>
+          <div class={'asset-preview ' + getAssetPreviewClass(asset)}>
+            {#if asset.image}
+              <img class="asset-image" src={asset.image} alt={asset.name} />
+            {:else if asset.type !== 'scene'}
+              <div class="portrait">{asset.initial}</div>
+            {/if}
+            {#if getAssetReferences(asset).length > 1}
+              <div class="asset-ref-badge">{getAssetReferences(asset).length} 张</div>
+            {/if}
+          </div>
 
-            <div class="asset-body">
-              <div class="asset-name">{asset.name}</div>
-              <div class="asset-desc">{asset.description}</div>
-            </div>
-          </button>
+          <div class="asset-body">
+            <div class="asset-name">{asset.name}</div>
+            <div class="asset-desc">{asset.description}</div>
+          </div>
           <div class="project-card-actions">
-            <button
+            <span
               class="project-action-btn project-action-danger"
+              role="button"
+              tabindex="0"
               aria-label={`删除 ${asset.name}`}
               on:click|stopPropagation={() => dispatch('deleteAsset', asset)}
-            >删除</button>
+              on:keydown|stopPropagation={(e) => e.key === 'Enter' && dispatch('deleteAsset', asset)}
+            >删除</span>
           </div>
-        </div>
+        </button>
       {/each}
 
       <button class="empty-card" on:click={createAsset}>

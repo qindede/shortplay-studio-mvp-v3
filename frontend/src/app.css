@@ -602,6 +602,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 .asset-card-button {
   appearance: none;
@@ -917,13 +918,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .empty-card:hover {
   transform: translateY(-2px);
   border-color: var(--line-strong);
-}
-.asset-card-wrapper {
-  position: relative;
-}
-.asset-card-wrapper .asset-card {
-  width: 100%;
-  height: 100%;
 }
 .project-cover {
   flex: 1 1 48%;
