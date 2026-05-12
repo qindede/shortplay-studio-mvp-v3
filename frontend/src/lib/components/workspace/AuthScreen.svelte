@@ -53,12 +53,12 @@
         <button class:active={authMode === 'register'} on:click={switchToRegister}>注册</button>
       </div>
 
-      <div class="field">
+      <div class="field auth-field">
         <label for="auth-username">用户名</label>
         <input id="auth-username" bind:value={authUsername} placeholder="请输入用户名" />
       </div>
 
-      <div class="field">
+      <div class="field auth-field">
         <label for="auth-password">密码</label>
         <input id="auth-password" type="password" bind:value={authPassword} placeholder="至少 6 位" on:keydown={(event) => event.key === 'Enter' && submitAuth()} />
       </div>
@@ -69,3 +69,9 @@
     </div>
   </div>
 </div>
+
+<style>
+  .auth-field {
+    margin-bottom: 16px;
+  }
+</style>
