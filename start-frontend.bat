@@ -1,6 +1,6 @@
 @echo off
 cd frontend
 if not exist node_modules (
-  npm install
+  pnpm install
 )
-npm run dev -- --open
+pnpm dev -- --open

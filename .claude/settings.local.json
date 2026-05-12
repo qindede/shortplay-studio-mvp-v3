@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx svelte-check *)",
+      "Bash(pnpm exec svelte-check *)",
       "WebSearch",
       "WebFetch(domain:unsplash.com)",
       "WebFetch(domain:www.pexels.com)",

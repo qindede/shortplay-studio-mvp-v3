@@ -2,6 +2,6 @@
 set -e
 cd "$(dirname "$0")/frontend"
 if [ ! -d node_modules ]; then
-  npm install
+  pnpm install
 fi
-npm run dev -- --open
+pnpm dev -- --open
