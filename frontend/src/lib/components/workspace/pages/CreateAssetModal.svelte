@@ -223,7 +223,7 @@
           </div>
           {#if mode === 'upload'}
             <div class="field">
-              <label>声音文件</label>
+              <label for="voice-file-input">声音文件</label>
               {#if voiceFile}
                 <div class="voice-file-row">
                   <span class="voice-file-name">{voiceFile.name}</span>

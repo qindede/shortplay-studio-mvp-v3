@@ -18,6 +18,8 @@
   let editDescription = '';
   let editInitial = '';
   let saving = false;
+  let voiceTraining = false;
+  let voiceError = '';
 
   $: filteredAssets = assetType === 'all' ? assets : assets.filter((asset) => asset.type === assetType);
   $: detailRefs = detailAsset ? getAssetReferences(detailAsset) : [];
@@ -122,6 +124,38 @@
       voiceAudio = null;
     }
     voicePlaying = false;
+  }
+
+  async function trainVoice() {
+    if (!detailAsset || !detailAsset.voice_url || voiceTraining) return;
+    const consent = window.confirm('请确认已获得该声音样本的合法授权。');
+    if (!consent) return;
+    voiceTraining = true;
+    voiceError = '';
+    try {
+      const updated = await api.startVoiceClone(detailAsset.id, { consent: true });
+      detailAsset = updated;
+      dispatch('assetUpdated', updated);
+    } catch (e) {
+      voiceError = e instanceof Error ? e.message : '音色训练失败';
+    } finally {
+      voiceTraining = false;
+    }
+  }
+
+  async function refreshVoice() {
+    if (!detailAsset || !detailAsset.speaker_id || voiceTraining) return;
+    voiceTraining = true;
+    voiceError = '';
+    try {
+      const updated = await api.voiceCloneStatus(detailAsset.id);
+      detailAsset = updated;
+      dispatch('assetUpdated', updated);
+    } catch (e) {
+      voiceError = e instanceof Error ? e.message : '音色状态查询失败';
+    } finally {
+      voiceTraining = false;
+    }
   }
 </script>
 
@@ -262,6 +296,21 @@
                     </button>
                   {/if}
                 </div>
+                {#if voiceError}<div class="error compact-alert">{voiceError}</div>{/if}
+                {#if detailAsset.type === 'character' && detailAsset.voice_url}
+                  <div class="voice-row">
+                    <p>{detailAsset.voice_status ? `音色状态：${detailAsset.voice_status}` : '可训练角色音色'}</p>
+                    {#if detailAsset.speaker_id}
+                      <button class="voice-play-btn" disabled={voiceTraining} on:click={refreshVoice}>
+                        <span>{voiceTraining ? '查询中...' : '查询训练状态'}</span>
+                      </button>
+                    {:else}
+                      <button class="voice-play-btn" disabled={voiceTraining} on:click={trainVoice}>
+                        <span>{voiceTraining ? '训练中...' : '训练音色'}</span>
+                      </button>
+                    {/if}
+                  </div>
+                {/if}
               </div>
             {/if}
             {#if selectedRef?.note}<div class="preview-row"><span>参考说明</span><p>{selectedRef.note}</p></div>{/if}

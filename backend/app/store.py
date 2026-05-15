@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from . import db_store
+
 DATA_PATH = Path(os.getenv("SHORTPLAY_DB", Path(__file__).resolve().parent.parent / "data" / "db.json"))
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -1067,6 +1069,13 @@ def ensure_data_file() -> None:
 
 
 def load_data() -> dict[str, Any]:
+    if db_store.enabled():
+        data = db_store.load_data()
+        if not data.get("users") and not data.get("projects"):
+            data = seed_data()
+            db_store.save_data(data)
+        return normalize_data(data)
+
     ensure_data_file()
     with _LOCK:
         data = json.loads(DATA_PATH.read_text(encoding="utf-8"))
@@ -1074,6 +1083,10 @@ def load_data() -> dict[str, Any]:
 
 
 def save_data(data: dict[str, Any]) -> None:
+    if db_store.enabled():
+        db_store.save_data(data)
+        return
+
     with _LOCK:
         DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
         DATA_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

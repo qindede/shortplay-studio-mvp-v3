@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi import HTTPException, Response
 
 from .routers import admin, auth, content, upload
-from .store import UPLOAD_DIR
+from . import storage
 
-app = FastAPI(title="shortplay-studio API", version="0.3.0")
+app = FastAPI(title="Muran API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,9 +22,16 @@ app.include_router(content.router)
 app.include_router(admin.router)
 app.include_router(upload.router)
 
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
-
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "name": "shortplay-studio"}
+    return {"ok": True, "name": "Muran"}
+
+
+@app.get("/uploads/{path:path}")
+def uploads(path: str):
+    try:
+        data, content_type = storage.get_object(path)
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return Response(content=data, media_type=content_type)

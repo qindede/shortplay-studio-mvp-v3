@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 
-const BACKEND = 'http://111.229.93.134:8000';
+const BACKEND = env.BACKEND_URL || 'http://localhost:8000';
 
 export const GET: RequestHandler = async ({ params }) => {
   const res = await fetch(`${BACKEND}/uploads/${params.path}`);

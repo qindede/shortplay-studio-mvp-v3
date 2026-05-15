@@ -47,7 +47,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export type Status = 'active' | 'review' | 'draft' | 'completed' | 'storyboard_ready' | 'generating' | 'pending' | 'needs_review' | 'exported';
+export type Status = 'active' | 'review' | 'draft' | 'completed' | 'storyboard_ready' | 'generating' | 'pending' | 'needs_review' | 'exported' | 'failed';
 export type UserRole = 'user' | 'admin';
 export type UserStatus = 'active' | 'disabled';
 
@@ -185,6 +185,8 @@ export interface Asset {
   image?: string;
   voice?: string;
   voice_url?: string;
+  voice_status?: Status | 'uploaded';
+  speaker_id?: string;
   references?: AssetReference[];
   updated_at: string;
 }
@@ -208,6 +210,9 @@ export interface VideoTask {
   updated_at: string;
   preview_url?: string;
   video_url?: string;
+  error?: string;
+  provider?: string;
+  provider_task_id?: string;
 }
 
 export interface VideoVersion {
@@ -223,6 +228,24 @@ export interface VideoVersion {
   created_at: string;
   preview_url?: string;
   video_url?: string;
+}
+
+export interface AiJob {
+  id: string;
+  user_id: string;
+  project_id?: string;
+  episode_id?: string;
+  shot_id?: string;
+  asset_id?: string;
+  type: string;
+  provider: string;
+  provider_task_id?: string;
+  status: string;
+  progress: number;
+  error?: string;
+  cost_points: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export const api = {
@@ -272,6 +295,9 @@ export const api = {
     request<{ ok: boolean }>(`/api/assets/${assetId}`, { method: 'DELETE' }),
   updateAsset: (assetId: string, body: { name?: string; description?: string; initial?: string; image?: string; voice?: string; voice_url?: string; references?: { id?: string; type: string; name: string; url?: string; note?: string }[] }) =>
     request<Asset>(`/api/assets/${assetId}`, { method: 'PUT', body: JSON.stringify(body) }),
+  startVoiceClone: (assetId: string, body: { voice_url?: string; consent: boolean }) =>
+    request<Asset>(`/api/assets/${assetId}/voice-clone`, { method: 'POST', body: JSON.stringify(body) }),
+  voiceCloneStatus: (assetId: string) => request<Asset>(`/api/assets/${assetId}/voice-clone`),
   optimizePrompt: (body: { prompt: string; context: string }) =>
     request<{ optimized: string }>('/api/optimize-prompt', { method: 'POST', body: JSON.stringify(body) }),
   upload: async (file: File): Promise<{ url: string }> => {
@@ -295,6 +321,8 @@ export const api = {
   compose: (episodeId: string, body: { name?: string; description?: string; ratio?: string; duration?: number }) =>
     request<VideoVersion>(`/api/episodes/${episodeId}/compose`, { method: 'POST', body: JSON.stringify(body) }),
   usage: () => request<Usage>('/api/usage'),
+  aiJob: (jobId: string) => request<AiJob>(`/api/ai-jobs/${jobId}`),
+  projectAiJobs: (projectId: string) => request<AiJob[]>(`/api/projects/${projectId}/ai-jobs`),
 
   adminSummary: () => request<AdminSummary>('/api/admin/summary'),
   adminUsers: () => request<User[]>('/api/admin/users'),

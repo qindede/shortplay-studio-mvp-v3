@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import subprocess
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..config import POINT_RULES
+from .. import storage
+from ..ai import image as ai_image
+from ..ai import llm as ai_llm
+from ..ai import video as ai_video
+from ..ai import voice as ai_voice
+from ..ai.errors import AIError
+from ..config import BACKEND_PUBLIC_URL, FFMPEG_PATH, POINT_RULES
 from ..schemas import (
     AssetCreate,
     AssetGenerate,
@@ -17,21 +27,17 @@ from ..schemas import (
     PromptOptimizeRequest,
     ShotCreate,
     ShotUpdate,
+    VoiceCloneRequest,
 )
 from ..security import get_current_user
 from ..services import (
-    build_project_outline,
-    build_storyboard,
     change_points,
-    consume_for_video,
-    create_or_complete_video_task,
     enrich_episode,
     enrich_project,
     find_by_id,
     get_user_projects,
     get_user_usage,
     not_found,
-    optimize_prompt,
     renumber,
     touch_episode_and_project,
     touch_project,
@@ -41,6 +47,98 @@ from ..services import (
 from ..store import now, snapshot, uid, update
 
 router = APIRouter(prefix="/api", tags=["content"])
+
+
+def ai_error(exc: AIError) -> HTTPException:
+    return HTTPException(status_code=503, detail=exc.public_message)
+
+
+def add_ai_job(
+    data: dict,
+    user_id: str,
+    job_type: str,
+    provider: str,
+    cost: int,
+    status: str = "succeeded",
+    progress: int = 100,
+    provider_task_id: str | None = None,
+    error: str | None = None,
+    **links,
+) -> dict:
+    ts = now()
+    job = {
+        "id": uid("job"),
+        "user_id": user_id,
+        "type": job_type,
+        "provider": provider,
+        "provider_task_id": provider_task_id,
+        "status": status,
+        "progress": progress,
+        "cost_points": cost,
+        "input_json": {},
+        "output_json": {},
+        "error": error,
+        "created_at": ts,
+        "updated_at": ts,
+        "completed_at": ts if status in {"succeeded", "failed", "cancelled"} else "",
+        **{key: value for key, value in links.items() if value},
+    }
+    data.setdefault("ai_jobs", []).insert(0, job)
+    return job
+
+
+def refund_once(data: dict, user_id: str, task: dict, amount: int, scene: str, description: str) -> None:
+    output_json = task.get("output_json") if isinstance(task.get("output_json"), dict) else {}
+    if task.get("refunded") or output_json.get("refunded") or amount <= 0:
+        return
+    change_points(data, user_id, amount, "refund", scene, description)
+    task["refunded"] = True
+    if "output_json" in task:
+        output_json["refunded"] = True
+        task["output_json"] = output_json
+
+
+def normalize_refs(refs: list[dict] | None) -> list[dict]:
+    normalized = []
+    for index, ref in enumerate(refs or [], start=1):
+        normalized.append({
+            "id": ref.get("id") or uid("ref"),
+            "type": ref.get("type", "image"),
+            "name": ref.get("name") or f"参考 {index:02d}",
+            "url": ref.get("url"),
+            "note": ref.get("note"),
+        })
+    return normalized
+
+
+def provider_media_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if url.startswith("/uploads/") and BACKEND_PUBLIC_URL:
+        return f"{BACKEND_PUBLIC_URL.rstrip('/')}{url}"
+    return None
+
+
+def find_reference_image(data: dict, shot: dict) -> str | None:
+    episode = next((item for item in data.get("episodes", []) if item["id"] == shot["episode_id"]), None)
+    if not episode:
+        return None
+    assets = [item for item in data.get("assets", []) if item.get("project_id") == episode["project_id"]]
+    character_names = {name.strip() for name in shot.get("characters", []) if name.strip()}
+    scene = (shot.get("scene") or "").strip()
+    candidates = []
+    if character_names:
+        candidates.extend(asset for asset in assets if asset.get("type") == "character" and asset.get("name") in character_names)
+    if scene:
+        candidates.extend(asset for asset in assets if asset.get("type") == "scene" and asset.get("name") == scene)
+    candidates.extend(asset for asset in assets if asset.get("type") in {"image", "scene", "character"})
+    for asset in candidates:
+        media_url = provider_media_url(asset.get("image"))
+        if media_url:
+            return media_url
+    return None
 
 
 @router.get("/dashboard")
@@ -60,15 +158,16 @@ def dashboard(user: dict = Depends(get_current_user)):
 
 @router.post("/optimize-prompt")
 def optimize_prompt_endpoint(payload: PromptOptimizeRequest, user: dict = Depends(get_current_user)):
-    optimized = optimize_prompt(payload.prompt, payload.context)
-    return {"optimized": optimized}
+    try:
+        return {"optimized": ai_llm.optimize_prompt(payload.prompt, payload.context)}
+    except AIError as exc:
+        raise ai_error(exc) from exc
 
 
 @router.get("/projects")
 def list_projects(user: dict = Depends(get_current_user)):
     data = snapshot()
-    user_projects = get_user_projects(data, user["id"])
-    return [enrich_project(data, p) for p in user_projects]
+    return [enrich_project(data, p) for p in get_user_projects(data, user["id"])]
 
 
 @router.post("/projects")
@@ -87,21 +186,18 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
             "updated_at": ts,
         }
         data["projects"].insert(0, project)
-
         for index, item in enumerate(payload.episodes, start=1):
-            data["episodes"].append(
-                {
-                    "id": uid("ep"),
-                    "project_id": project["id"],
-                    "no": index,
-                    "title": item.title,
-                    "summary": item.summary,
-                    "script": item.script or item.summary,
-                    "duration_target": item.duration_target,
-                    "status": "draft",
-                    "updated_at": ts,
-                }
-            )
+            data["episodes"].append({
+                "id": uid("ep"),
+                "project_id": project["id"],
+                "no": index,
+                "title": item.title,
+                "summary": item.summary,
+                "script": item.script or item.summary,
+                "duration_target": item.duration_target,
+                "status": "draft",
+                "updated_at": ts,
+            })
         return enrich_project(data, project)
 
     return update(mutate)
@@ -109,10 +205,16 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
 
 @router.post("/projects/generate-outline", response_model=OutlineGenerateResponse)
 def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depends(get_current_user)):
+    try:
+        episodes = ai_llm.generate_outline(payload)
+    except AIError as exc:
+        raise ai_error(exc) from exc
+
     def mutate(data):
         cost = POINT_RULES["outline"]
         change_points(data, user["id"], -cost, "consume", "生成短剧大纲", f"智能生成《{payload.name}》短剧大纲")
-        return {"cost": cost, "episodes": build_project_outline(payload)}
+        add_ai_job(data, user["id"], "outline", "minimax", cost)
+        return {"cost": cost, "episodes": episodes}
 
     return update(mutate)
 
@@ -129,11 +231,8 @@ def update_project(project_id: str, payload: ProjectUpdate, user: dict = Depends
         project = verify_project_ownership(data, project_id, user["id"])
         updates = payload.model_dump(exclude_none=True)
         if "name" in updates:
-            name = updates["name"].strip()
-            if not name:
-                raise HTTPException(status_code=422, detail="项目名称不能为空")
-            project["name"] = name
-            project["short_name"] = name[:8]
+            project["name"] = updates["name"].strip()
+            project["short_name"] = project["name"][:8]
         if "description" in updates:
             project["description"] = updates["description"]
         if "status" in updates:
@@ -150,16 +249,11 @@ def delete_project(project_id: str, user: dict = Depends(get_current_user)):
         verify_project_ownership(data, project_id, user["id"])
         episode_ids = {e["id"] for e in data["episodes"] if e["project_id"] == project_id}
         shot_ids = {s["id"] for s in data["shots"] if s["episode_id"] in episode_ids}
-
         data["projects"] = [p for p in data["projects"] if p["id"] != project_id]
         data["episodes"] = [e for e in data["episodes"] if e["project_id"] != project_id]
         data["shots"] = [s for s in data["shots"] if s["episode_id"] not in episode_ids]
         data["assets"] = [a for a in data["assets"] if a["project_id"] != project_id]
-        data["video_tasks"] = [
-            t
-            for t in data["video_tasks"]
-            if t.get("episode_id") not in episode_ids and t.get("shot_id") not in shot_ids
-        ]
+        data["video_tasks"] = [t for t in data["video_tasks"] if t.get("episode_id") not in episode_ids and t.get("shot_id") not in shot_ids]
         data["video_versions"] = [v for v in data["video_versions"] if v["project_id"] != project_id]
         return {"ok": True}
 
@@ -212,8 +306,7 @@ def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
         verify_project_ownership(data, episode["project_id"], user["id"])
-        for key, value in payload.model_dump(exclude_none=True).items():
-            episode[key] = value
+        episode.update(payload.model_dump(exclude_none=True))
         touch_episode_and_project(data, episode)
         return enrich_episode(data, episode)
 
@@ -277,15 +370,40 @@ def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_c
 
 @router.post("/episodes/{episode_id}/generate-storyboard")
 def generate_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
+    current = snapshot()
+    episode = find_by_id(current["episodes"], episode_id, "episode")
+    project = verify_project_ownership(current, episode["project_id"], user["id"])
+    assets = [a for a in current["assets"] if a["project_id"] == project["id"]]
+    try:
+        ai_shots = ai_llm.generate_storyboard(project, episode, assets)
+    except AIError as exc:
+        raise ai_error(exc) from exc
+
     def mutate(data):
-        episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, episode["project_id"], user["id"])
-        change_points(data, user["id"], -POINT_RULES["storyboard"], "consume", "生成分镜", f"生成/更新《{episode['title']}》分镜")
+        target = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, target["project_id"], user["id"])
+        cost = POINT_RULES["storyboard"]
+        change_points(data, user["id"], -cost, "consume", "生成分镜", f"生成/更新《{target['title']}》分镜")
+        add_ai_job(data, user["id"], "storyboard", "minimax", cost, episode_id=episode_id, project_id=target["project_id"])
         data["shots"] = [s for s in data["shots"] if s["episode_id"] != episode_id]
-        new_shots = build_storyboard(episode)
+        new_shots = []
+        for index, item in enumerate(ai_shots, start=1):
+            new_shots.append({
+                "id": uid("shot"),
+                "episode_id": episode_id,
+                "no": index,
+                "title": item["title"],
+                "visual": item.get("visual", ""),
+                "dialogue": item.get("dialogue", ""),
+                "characters": item.get("characters", []),
+                "scene": item.get("scene", ""),
+                "duration": item.get("duration", 3),
+                "status": "pending",
+                "updated_at": now(),
+            })
         data["shots"].extend(new_shots)
-        episode["status"] = "storyboard_ready"
-        touch_episode_and_project(data, episode)
+        target["status"] = "storyboard_ready"
+        touch_episode_and_project(data, target)
         return new_shots
 
     return update(mutate)
@@ -295,13 +413,12 @@ def generate_storyboard(episode_id: str, user: dict = Depends(get_current_user))
 def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_current_user)):
     def mutate(data):
         shot = find_by_id(data["shots"], shot_id, "shot")
-        episode_for_shot = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
-        if episode_for_shot:
-            verify_project_ownership(data, episode_for_shot["project_id"], user["id"])
+        episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
+        if episode:
+            verify_project_ownership(data, episode["project_id"], user["id"])
         updates = payload.model_dump(exclude_none=True)
         shot.update(updates)
         shot["updated_at"] = now()
-
         task = next((t for t in data["video_tasks"] if t["shot_id"] == shot_id), None)
         if task:
             if "title" in updates:
@@ -309,8 +426,6 @@ def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_curre
             if "duration" in updates:
                 task["duration"] = shot["duration"]
             task["updated_at"] = now()
-
-        episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
         if episode:
             touch_episode_and_project(data, episode)
         return shot
@@ -322,13 +437,12 @@ def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_curre
 def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
     def mutate(data):
         shot = find_by_id(data["shots"], shot_id, "shot")
-        episode_id = shot["episode_id"]
-        episode = next((e for e in data["episodes"] if e["id"] == episode_id), None)
+        episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
         if episode:
             verify_project_ownership(data, episode["project_id"], user["id"])
         data["shots"] = [s for s in data["shots"] if s["id"] != shot_id]
         data["video_tasks"] = [t for t in data["video_tasks"] if t["shot_id"] != shot_id]
-        renumber([s for s in data["shots"] if s["episode_id"] == episode_id])
+        renumber([s for s in data["shots"] if s["episode_id"] == shot["episode_id"]])
         if episode:
             touch_episode_and_project(data, episode)
         return {"ok": True}
@@ -338,32 +452,95 @@ def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/episodes/{episode_id}/video-tasks")
 def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
-    data = snapshot()
-    episode = find_by_id(data["episodes"], episode_id, "episode")
-    verify_project_ownership(data, episode["project_id"], user["id"])
-    tasks = [t for t in data["video_tasks"] if t["episode_id"] == episode_id]
-    tasks.sort(key=lambda x: x["updated_at"], reverse=True)
-    return tasks
+    def mutate(data):
+        episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, episode["project_id"], user["id"])
+        tasks = [t for t in data["video_tasks"] if t["episode_id"] == episode_id]
+        for task in tasks:
+            if task.get("status") != "generating" or not task.get("provider_task_id"):
+                continue
+            try:
+                remote = ai_video.query_video_task(task["provider_task_id"])
+            except AIError:
+                continue
+            task.update({key: value for key, value in remote.items() if value is not None})
+            task["updated_at"] = now()
+            job = next((item for item in data.get("ai_jobs", []) if item.get("id") == task.get("ai_job_id")), None)
+            if job:
+                job["progress"] = task.get("progress", job.get("progress", 0))
+                job["updated_at"] = task["updated_at"]
+                if task.get("status") == "completed":
+                    job["status"] = "succeeded"
+                    job["completed_at"] = task["updated_at"]
+                    job["output_json"] = {"video_url": task.get("video_url")}
+                elif task.get("status") == "failed":
+                    job["status"] = "failed"
+                    job["error"] = task.get("error")
+                    job["completed_at"] = task["updated_at"]
+            shot = next((s for s in data["shots"] if s["id"] == task["shot_id"]), None)
+            if shot and task.get("status") in {"completed", "failed"}:
+                shot["status"] = task["status"]
+                shot["updated_at"] = task["updated_at"]
+            if task.get("status") == "failed":
+                refund_target = job or task
+                refund_once(data, user["id"], refund_target, task["duration"] * POINT_RULES["video_second"], "视频生成失败退款", task.get("error") or "视频任务失败")
+        tasks.sort(key=lambda x: x["updated_at"], reverse=True)
+        return tasks
+
+    return update(mutate)
 
 
 @router.post("/shots/{shot_id}/generate-video")
 def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)):
+    current = snapshot()
+    shot = find_by_id(current["shots"], shot_id, "shot")
+    episode = next((e for e in current["episodes"] if e["id"] == shot["episode_id"]), None)
+    if episode:
+        verify_project_ownership(current, episode["project_id"], user["id"])
+    image_url = find_reference_image(current, shot)
+    try:
+        provider_task_id = ai_video.create_video_task(shot.get("visual") or shot["title"], image_url, shot["duration"])
+    except AIError as exc:
+        raise ai_error(exc) from exc
+
     def mutate(data):
-        shot = find_by_id(data["shots"], shot_id, "shot")
-        episode_for_shot = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
+        target = find_by_id(data["shots"], shot_id, "shot")
+        episode_for_shot = next((e for e in data["episodes"] if e["id"] == target["episode_id"]), None)
         if episode_for_shot:
             verify_project_ownership(data, episode_for_shot["project_id"], user["id"])
-        consume_for_video(
+        duration = max(1, int(target["duration"]))
+        change_points(data, user["id"], -(duration * POINT_RULES["video_second"]), "consume", "生成镜头视频", f"生成镜头 #{target['no']}《{target['title']}》，{duration}s")
+        job = add_ai_job(
             data,
             user["id"],
-            [shot],
-            "生成镜头视频",
-            f"生成镜头 #{shot['no']}《{shot['title']}》，{shot['duration']}s",
+            "video_shot",
+            "seedance",
+            duration * POINT_RULES["video_second"],
+            status="running",
+            progress=0,
+            provider_task_id=provider_task_id,
+            episode_id=target["episode_id"],
+            shot_id=target["id"],
         )
-        task = create_or_complete_video_task(data, shot)
-        episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
-        if episode:
-            touch_episode_and_project(data, episode)
+        task = next((t for t in data["video_tasks"] if t["shot_id"] == target["id"]), None)
+        if not task:
+            task = {"id": uid("task"), "episode_id": target["episode_id"], "shot_id": target["id"]}
+            data["video_tasks"].append(task)
+        task.update({
+            "title": target["title"],
+            "duration": duration,
+            "progress": 0,
+            "status": "generating",
+            "provider": "seedance",
+            "provider_task_id": provider_task_id,
+            "ai_job_id": job["id"],
+            "error": None,
+            "updated_at": now(),
+        })
+        target["status"] = "generating"
+        target["updated_at"] = now()
+        if episode_for_shot:
+            touch_episode_and_project(data, episode_for_shot)
         return task
 
     return update(mutate)
@@ -371,24 +548,62 @@ def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)
 
 @router.post("/episodes/{episode_id}/generate-videos")
 def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user)):
-    def mutate(data):
-        episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, episode["project_id"], user["id"])
-        shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
-        if not shots:
-            not_found("shots")
+    current = snapshot()
+    episode = find_by_id(current["episodes"], episode_id, "episode")
+    verify_project_ownership(current, episode["project_id"], user["id"])
+    shots = [s for s in current["shots"] if s["episode_id"] == episode_id]
+    if not shots:
+        not_found("shots")
+    try:
+        provider_tasks = {
+            shot["id"]: ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(current, shot), shot["duration"])
+            for shot in shots
+        }
+    except AIError as exc:
+        raise ai_error(exc) from exc
 
-        total_duration = sum(max(1, int(s["duration"])) for s in shots)
-        consume_for_video(
-            data,
-            user["id"],
-            shots,
-            "批量生成视频",
-            f"批量生成《{episode['title']}》{len(shots)} 个镜头，{total_duration}s",
-        )
-        tasks = [create_or_complete_video_task(data, shot) for shot in shots]
-        episode["status"] = "completed"
-        touch_episode_and_project(data, episode)
+    def mutate(data):
+        target_episode = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, target_episode["project_id"], user["id"])
+        target_shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
+        total_duration = sum(max(1, int(s["duration"])) for s in target_shots)
+        change_points(data, user["id"], -(total_duration * POINT_RULES["video_second"]), "consume", "批量生成视频", f"批量生成《{target_episode['title']}》{len(target_shots)} 个镜头，{total_duration}s")
+        tasks = []
+        for target in target_shots:
+            duration = max(1, int(target["duration"]))
+            job = add_ai_job(
+                data,
+                user["id"],
+                "video_shot",
+                "seedance",
+                duration * POINT_RULES["video_second"],
+                status="running",
+                progress=0,
+                provider_task_id=provider_tasks[target["id"]],
+                episode_id=episode_id,
+                shot_id=target["id"],
+                project_id=target_episode["project_id"],
+            )
+            task = next((t for t in data["video_tasks"] if t["shot_id"] == target["id"]), None)
+            if not task:
+                task = {"id": uid("task"), "episode_id": target["episode_id"], "shot_id": target["id"]}
+                data["video_tasks"].append(task)
+            task.update({
+                "title": target["title"],
+                "duration": max(1, int(target["duration"])),
+                "progress": 0,
+                "status": "generating",
+                "provider": "seedance",
+                "provider_task_id": provider_tasks[target["id"]],
+                "ai_job_id": job["id"],
+                "error": None,
+                "updated_at": now(),
+            })
+            target["status"] = "generating"
+            target["updated_at"] = now()
+            tasks.append(task)
+        target_episode["status"] = "generating"
+        touch_episode_and_project(data, target_episode)
         return tasks
 
     return update(mutate)
@@ -404,15 +619,84 @@ def list_assets(project_id: str, type: str | None = None, user: dict = Depends(g
     return assets
 
 
-@router.delete("/assets/{asset_id}")
-def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
+@router.post("/projects/{project_id}/assets")
+def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get_current_user)):
     def mutate(data):
-        asset = next((a for a in data["assets"] if a["id"] == asset_id), None)
-        if not asset:
-            raise HTTPException(status_code=404, detail="素材不存在")
-        verify_project_ownership(data, asset["project_id"], user["id"])
-        data["assets"] = [a for a in data["assets"] if a["id"] != asset_id]
-        return {"ok": True}
+        verify_project_ownership(data, project_id, user["id"])
+        visual_asset = payload.type in {"character", "scene", "image"}
+        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
+        change_points(data, user["id"], -cost, "consume", "创建素材", f"创建素材《{payload.name}》")
+        ts = now()
+        refs = normalize_refs(payload.references)
+        asset = {
+            "id": uid("asset"),
+            "project_id": project_id,
+            "type": payload.type,
+            "name": payload.name,
+            "description": payload.description,
+            "ref_count": len(refs),
+            "initial": payload.initial[:1] or payload.name[:1],
+            "image": payload.image,
+            "voice": payload.voice,
+            "voice_url": payload.voice_url,
+            "voice_status": "uploaded" if payload.voice_url else None,
+            "references": refs,
+            "updated_at": ts,
+        }
+        data["assets"].insert(0, asset)
+        if visual_asset:
+            usage = get_user_usage(data, user["id"])
+            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
+        touch_project(data, project_id, ts)
+        return asset
+
+    return update(mutate)
+
+
+@router.post("/projects/{project_id}/assets/generate")
+def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends(get_current_user)):
+    visual_asset = payload.type in {"character", "scene", "image"}
+    if visual_asset:
+        try:
+            generated_url = ai_image.generate_image(payload.prompt)
+        except AIError as exc:
+            raise ai_error(exc) from exc
+    else:
+        generated_url = None
+
+    def mutate(data):
+        verify_project_ownership(data, project_id, user["id"])
+        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
+        change_points(data, user["id"], -cost, "consume", "AI 生成素材", f"AI 生成素材《{payload.name}》")
+        add_ai_job(data, user["id"], "image_asset" if visual_asset else "audio_asset", "seedream" if visual_asset else "manual", cost, project_id=project_id)
+        ts = now()
+        refs = [{
+            "id": uid("ref"),
+            "type": "image" if visual_asset else "audio",
+            "name": f"AI 生成 - {payload.name}",
+            "url": generated_url,
+            "note": payload.prompt,
+        }]
+        asset = {
+            "id": uid("asset"),
+            "project_id": project_id,
+            "type": payload.type,
+            "name": payload.name,
+            "description": payload.description,
+            "ref_count": len(refs),
+            "initial": payload.name[:1],
+            "image": generated_url,
+            "voice": None,
+            "voice_url": None,
+            "references": refs,
+            "updated_at": ts,
+        }
+        data["assets"].insert(0, asset)
+        if visual_asset:
+            usage = get_user_usage(data, user["id"])
+            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
+        touch_project(data, project_id, ts)
+        return asset
 
     return update(mutate)
 
@@ -420,140 +704,112 @@ def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
 @router.put("/assets/{asset_id}")
 def update_asset(asset_id: str, payload: AssetUpdate, user: dict = Depends(get_current_user)):
     def mutate(data):
-        asset = next((a for a in data["assets"] if a["id"] == asset_id), None)
-        if not asset:
-            raise HTTPException(status_code=404, detail="素材不存在")
+        asset = find_by_id(data["assets"], asset_id, "asset")
         verify_project_ownership(data, asset["project_id"], user["id"])
-
-        ts = now()
         update_data = payload.model_dump(exclude_unset=True)
-
         if "references" in update_data and update_data["references"] is not None:
-            references = []
-            for i, ref in enumerate(update_data["references"]):
-                references.append({
-                    "id": ref.get("id") or uid("ref"),
-                    "type": ref.get("type", "image"),
-                    "name": ref.get("name", f"参考 {i + 1:02d}"),
-                    "url": ref.get("url"),
-                    "note": ref.get("note"),
-                })
-            update_data["references"] = references
-
+            update_data["references"] = normalize_refs(update_data["references"])
+            update_data["ref_count"] = len(update_data["references"])
         asset.update(update_data)
-        asset["updated_at"] = ts
-        touch_project(data, asset["project_id"], ts)
+        asset["updated_at"] = now()
+        touch_project(data, asset["project_id"], asset["updated_at"])
         return asset
 
     return update(mutate)
 
 
-@router.post("/projects/{project_id}/assets")
-def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get_current_user)):
+@router.delete("/assets/{asset_id}")
+def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
     def mutate(data):
-        verify_project_ownership(data, project_id, user["id"])
-        visual_asset = payload.type in {"character", "scene", "image"}
-        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-        scene = "创建视觉素材" if visual_asset else "创建音频素材"
-        change_points(data, user["id"], -cost, "consume", scene, f"创建素材《{payload.name}》")
-
-        ts = now()
-        references = []
-        if payload.references:
-            for i, ref in enumerate(payload.references):
-                references.append({
-                    "id": uid("ref"),
-                    "type": ref.get("type", "image"),
-                    "name": ref.get("name", f"参考 {i + 1:02d}"),
-                    "url": ref.get("url"),
-                    "note": ref.get("note"),
-                })
-
-        asset = {
-            "id": uid("asset"),
-            "project_id": project_id,
-            "type": payload.type,
-            "name": payload.name,
-            "description": payload.description,
-            "ref_count": len(references),
-            "initial": payload.initial[:1] or payload.name[:1],
-            "image": payload.image,
-            "voice": payload.voice,
-            "voice_url": payload.voice_url,
-            "references": references,
-            "updated_at": ts,
-        }
-        data["assets"].insert(0, asset)
-        if visual_asset:
-            user_usage = get_user_usage(data, user["id"])
-            user_usage["image_used"] = min(user_usage["image_total"], user_usage["image_used"] + 1)
-        touch_project(data, project_id, ts)
-        return asset
-
-    return update(mutate)
-
-
-PLACEHOLDER_IMAGES = {
-    "character": "/portraits/placeholder_character.jpg",
-    "scene": "/portraits/placeholder_scene.jpg",
-    "image": "/portraits/placeholder_image.jpg",
-    "audio": "/portraits/placeholder_audio.jpg",
-}
-
-
-@router.post("/projects/{project_id}/assets/generate")
-def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends(get_current_user)):
-    def mutate(data):
-        verify_project_ownership(data, project_id, user["id"])
-        visual_asset = payload.type in {"character", "scene", "image"}
-        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-        scene = "AI 生成视觉素材" if visual_asset else "AI 生成音频素材"
-        change_points(data, user["id"], -cost, "consume", scene, f"AI 生成素材《{payload.name}》")
-
-        ts = now()
-        image_url = PLACEHOLDER_IMAGES.get(payload.type, "/portraits/placeholder_character.jpg")
-
-        references = [{
-            "id": uid("ref"),
-            "type": "image" if visual_asset else "audio",
-            "name": f"AI 生成 - {payload.name}",
-            "url": image_url,
-            "note": payload.prompt,
-        }]
-
-        asset = {
-            "id": uid("asset"),
-            "project_id": project_id,
-            "type": payload.type,
-            "name": payload.name,
-            "description": payload.description,
-            "ref_count": 1,
-            "initial": payload.name[:1],
-            "image": image_url,
-            "voice": None,
-            "voice_url": None,
-            "references": references,
-            "updated_at": ts,
-        }
-        data["assets"].insert(0, asset)
-        if visual_asset:
-            user_usage = get_user_usage(data, user["id"])
-            user_usage["image_used"] = min(user_usage["image_total"], user_usage["image_used"] + 1)
-        touch_project(data, project_id, ts)
-        return asset
-
-    return update(mutate)
-
-
-@router.delete("/video-versions/{version_id}")
-def delete_video_version(version_id: str, user: dict = Depends(get_current_user)):
-    def mutate(data):
-        version = next((v for v in data["video_versions"] if v["id"] == version_id), None)
-        if not version:
-            raise HTTPException(status_code=404, detail="版本不存在")
-        verify_project_ownership(data, version["project_id"], user["id"])
-        data["video_versions"] = [v for v in data["video_versions"] if v["id"] != version_id]
+        asset = find_by_id(data["assets"], asset_id, "asset")
+        verify_project_ownership(data, asset["project_id"], user["id"])
+        data["assets"] = [a for a in data["assets"] if a["id"] != asset_id]
         return {"ok": True}
+
+    return update(mutate)
+
+
+@router.post("/assets/{asset_id}/voice-clone")
+def start_voice_clone(asset_id: str, payload: VoiceCloneRequest, user: dict = Depends(get_current_user)):
+    if not payload.consent:
+        raise HTTPException(status_code=400, detail="请确认已获得声音授权")
+    current = snapshot()
+    asset = find_by_id(current["assets"], asset_id, "asset")
+    verify_project_ownership(current, asset["project_id"], user["id"])
+    voice_url = payload.voice_url or asset.get("voice_url")
+    if not voice_url or not voice_url.startswith("/uploads/"):
+        raise HTTPException(status_code=400, detail="请先上传角色声音样本")
+    try:
+        audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
+        speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
+        result = ai_voice.clone_voice(speaker_id, audio, Path(voice_url).suffix.lstrip(".") or "wav")
+    except (AIError, storage.StorageError) as exc:
+        raise HTTPException(status_code=503, detail=getattr(exc, "public_message", str(exc))) from exc
+
+    def mutate(data):
+        target = find_by_id(data["assets"], asset_id, "asset")
+        verify_project_ownership(data, target["project_id"], user["id"])
+        cost = POINT_RULES["voice_clone"]
+        change_points(data, user["id"], -cost, "consume", "音色克隆", f"训练《{target['name']}》角色音色")
+        target.update({k: v for k, v in result.items() if v is not None})
+        target["updated_at"] = now()
+        job = add_ai_job(
+            data,
+            user["id"],
+            "voice_clone",
+            "volc_voice",
+            cost,
+            status="succeeded" if target.get("voice_status") == "completed" else "running",
+            progress=100 if target.get("voice_status") == "completed" else 0,
+            provider_task_id=target.get("speaker_id"),
+            project_id=target["project_id"],
+            asset_id=asset_id,
+        )
+        if job["status"] == "running":
+            job["completed_at"] = ""
+        return target
+
+    return update(mutate)
+
+
+@router.get("/assets/{asset_id}/voice-clone")
+def get_voice_clone(asset_id: str, user: dict = Depends(get_current_user)):
+    current = snapshot()
+    asset = find_by_id(current["assets"], asset_id, "asset")
+    verify_project_ownership(current, asset["project_id"], user["id"])
+    if not asset.get("speaker_id"):
+        return asset
+    try:
+        result = ai_voice.get_voice(asset["speaker_id"])
+    except AIError as exc:
+        raise ai_error(exc) from exc
+
+    def mutate(data):
+        target = find_by_id(data["assets"], asset_id, "asset")
+        verify_project_ownership(data, target["project_id"], user["id"])
+        target.update({k: v for k, v in result.items() if v is not None})
+        target["updated_at"] = now()
+        job = next(
+            (
+                item
+                for item in data.get("ai_jobs", [])
+                if item.get("asset_id") == asset_id and item.get("type") == "voice_clone" and item.get("status") == "running"
+            ),
+            None,
+        )
+        if job:
+            job["progress"] = 100 if target.get("voice_status") == "completed" else job.get("progress", 0)
+            job["updated_at"] = target["updated_at"]
+            if target.get("voice_status") == "completed":
+                job["status"] = "succeeded"
+                job["completed_at"] = target["updated_at"]
+                job["output_json"] = {"voice_url": target.get("voice_url"), "speaker_id": target.get("speaker_id")}
+            elif target.get("voice_status") == "failed":
+                job["status"] = "failed"
+                job["error"] = result.get("error")
+                job["completed_at"] = target["updated_at"]
+                refund_once(data, user["id"], job, job.get("cost_points", 0), "音色克隆失败退款", result.get("error") or "音色训练失败")
+        return target
 
     return update(mutate)
 
@@ -569,32 +825,102 @@ def list_video_versions(project_id: str, episode_id: str | None = None, user: di
     return versions
 
 
+@router.delete("/video-versions/{version_id}")
+def delete_video_version(version_id: str, user: dict = Depends(get_current_user)):
+    def mutate(data):
+        version = find_by_id(data["video_versions"], version_id, "version")
+        verify_project_ownership(data, version["project_id"], user["id"])
+        data["video_versions"] = [v for v in data["video_versions"] if v["id"] != version_id]
+        return {"ok": True}
+
+    return update(mutate)
+
+
+def compose_video_file(tasks: list[dict]) -> str:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        inputs = []
+        for index, task in enumerate(tasks, start=1):
+            url = task.get("video_url") or task.get("preview_url")
+            if not url or not url.startswith("/uploads/"):
+                raise HTTPException(status_code=400, detail="镜头视频文件不完整，无法合成")
+            data, _ = storage.get_object(url.removeprefix("/uploads/"))
+            path = tmpdir / f"{index:03d}.mp4"
+            path.write_bytes(data)
+            inputs.append(path)
+        concat = tmpdir / "inputs.txt"
+        concat.write_text("".join(f"file '{p.as_posix()}'\n" for p in inputs), encoding="utf-8")
+        output = tmpdir / "episode.mp4"
+        try:
+            subprocess.run(
+                [FFMPEG_PATH, "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(output)],
+                check=True,
+                capture_output=True,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=503, detail="服务器未配置 ffmpeg") from exc
+        except subprocess.CalledProcessError as exc:
+            raise HTTPException(status_code=503, detail="视频合成失败") from exc
+        key = storage.make_object_key("composed", "episode.mp4", ".mp4")
+        return storage.put_bytes(output.read_bytes(), key, "video/mp4")
+
+
 @router.post("/episodes/{episode_id}/compose")
 def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depends(get_current_user)):
+    current = snapshot()
+    episode = find_by_id(current["episodes"], episode_id, "episode")
+    verify_project_ownership(current, episode["project_id"], user["id"])
+    tasks = [t for t in current["video_tasks"] if t["episode_id"] == episode_id]
+    shots = [s for s in current["shots"] if s["episode_id"] == episode_id]
+    if not shots or any(s.get("status") != "completed" for s in shots):
+        raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
+    shot_order = {shot["id"]: shot["no"] for shot in shots}
+    video_url = compose_video_file(sorted(tasks, key=lambda item: shot_order.get(item.get("shot_id"), 0)))
+
     def mutate(data):
-        episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, episode["project_id"], user["id"])
-        change_points(data, user["id"], -POINT_RULES["compose"], "consume", "合成成片", f"合成《{episode['title']}》成片版本")
+        target = find_by_id(data["episodes"], episode_id, "episode")
+        verify_project_ownership(data, target["project_id"], user["id"])
+        cost = POINT_RULES["compose"]
+        change_points(data, user["id"], -cost, "consume", "合成成片", f"合成《{target['title']}》成片版本")
+        add_ai_job(data, user["id"], "compose", "ffmpeg", cost, episode_id=episode_id, project_id=target["project_id"])
         version_no = len([v for v in data["video_versions"] if v["episode_id"] == episode_id]) + 1
         version = {
             "id": uid("ver"),
-            "project_id": episode["project_id"],
+            "project_id": target["project_id"],
             "episode_id": episode_id,
-            "name": payload.name if payload.name != "成片版本" else f"第{episode['no']:02d}集 版本{chr(64 + version_no)}",
+            "name": payload.name if payload.name != "成片版本" else f"第{target['no']:02d}集 版本{chr(64 + version_no)}",
             "description": payload.description,
             "duration": payload.duration,
             "ratio": payload.ratio,
-            "status": "review",
+            "status": "exported",
             "theme": "green" if version_no % 2 else "blue",
+            "preview_url": video_url,
+            "video_url": video_url,
             "created_at": now(),
         }
         data["video_versions"].insert(0, version)
-        user_usage = get_user_usage(data, user["id"])
-        user_usage["export_used"] = min(user_usage["export_total"], user_usage["export_used"] + 1)
-        touch_episode_and_project(data, episode)
+        usage = get_user_usage(data, user["id"])
+        usage["export_used"] = min(usage["export_total"], usage["export_used"] + 1)
+        touch_episode_and_project(data, target)
         return version
 
     return update(mutate)
+
+
+@router.get("/ai-jobs/{job_id}")
+def get_ai_job(job_id: str, user: dict = Depends(get_current_user)):
+    data = snapshot()
+    job = find_by_id(data.get("ai_jobs", []), job_id, "ai job")
+    if job.get("user_id") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="无权访问该任务")
+    return job
+
+
+@router.get("/projects/{project_id}/ai-jobs")
+def list_project_ai_jobs(project_id: str, user: dict = Depends(get_current_user)):
+    data = snapshot()
+    verify_project_ownership(data, project_id, user["id"])
+    return [job for job in data.get("ai_jobs", []) if job.get("project_id") == project_id][:100]
 
 
 @router.get("/usage")

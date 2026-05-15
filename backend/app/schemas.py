@@ -87,6 +87,8 @@ class AssetUpdate(BaseModel):
     image: str | None = None
     voice: str | None = None
     voice_url: str | None = None
+    voice_status: str | None = None
+    speaker_id: str | None = None
     references: list[dict] | None = None
 
 
@@ -95,6 +97,11 @@ class AssetGenerate(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
     prompt: str = Field(min_length=1)
+
+
+class VoiceCloneRequest(BaseModel):
+    voice_url: str | None = None
+    consent: bool = False
 
 
 class ShotCreate(BaseModel):
@@ -128,7 +135,7 @@ class ComposeRequest(BaseModel):
 
 
 class AdminPointAdjust(BaseModel):
-    amount: int = Field(description="正数为充值，负数为扣减")
+    amount: int = Field(description="正数为充值，负数为扣除")
     reason: str = "管理员调整"
 
 

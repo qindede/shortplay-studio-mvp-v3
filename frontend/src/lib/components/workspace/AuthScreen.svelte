@@ -37,7 +37,7 @@
       <div class="auth-brand">
         <div class="brand-mark">SP</div>
         <div>
-          <div class="brand-title">shortplay-studio</div>
+          <div class="brand-title">Muran</div>
           <div class="brand-subtitle">短剧内容创作舱</div>
         </div>
       </div>

@@ -1,4 +1,27 @@
-LLM模型
-兼容 OpenAI 接口：https://api.minimaxi.com/v1
-api key：eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJ0aXR1cyIsIlVzZXJOYW1lIjoidGl0dXMiLCJBY2NvdW50IjoiIiwiU3ViamVjdElEIjoiMTk4Nzg3MDg2MDE1Njg3MDc2MSIsIlBob25lIjoiMTc3ODYxNTY2OTQiLCJHcm91cElEIjoiMTk4Nzg3MDg2MDE0NDI4Nzg0OSIsIlBhZ2VOYW1lIjoiIiwiTWFpbCI6IiIsIkNyZWF0ZVRpbWUiOiIyMDI1LTExLTE2IDAwOjA5OjM3IiwiVG9rZW5UeXBlIjo0LCJpc3MiOiJtaW5pbWF4In0.iKgZSfhKkMbt3tDtL__Ls0gry876njK37bMW45ww62CtDOZskDUvefG9caosouHxjvHGjqEpP8ppB2zUxnMiCmy0hI7kDfMdxGN_iYS1I_QekLMzeCTfug9Wyxvkb3JZworlKF7IW7Riv8ETAnqAv-fZM9GkHgvN606F8eqkWBbFODzEDW8AjxDr2H459aSZU4T3V2gL7oBScsi4NIYxTen8yYH20r0B8OTMqjkmSGXwdBR6VbrvfA-rh5eOabvWV4sA7XmhySwA1oK3ZlIi0FL_2XjzSW1QB--y_jeyNKrHWs8yHSbVgwUFHe7vPzH3hORWKcgjiLqsyfhonTKtcg
+# AI 接口配置
 
+所有供应商密钥只能通过环境变量注入，禁止写入代码仓库或 Markdown 文档。
+
+## LLM
+
+- 接口：`https://api.minimaxi.com/v1`
+- 环境变量：`MINIMAX_API_KEY`
+- 模型：`MINIMAX_TEXT_MODEL`
+
+## 文生图 / 图生图
+
+- 接口：`https://ark.cn-beijing.volces.com/api/v3/images/generations`
+- 环境变量：`ARK_API_KEY`
+- 模型：`ARK_IMAGE_MODEL`
+
+## 视频生成
+
+- 接口：`https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks`
+- 环境变量：`ARK_API_KEY`
+- 模型：`ARK_VIDEO_MODEL`
+
+## 音色设计
+
+- 训练接口：`https://openspeech.bytedance.com/api/v3/tts/voice_clone`
+- 查询接口：`https://openspeech.bytedance.com/api/v3/tts/get_voice`
+- 环境变量：`VOLC_VOICE_API_KEY`
