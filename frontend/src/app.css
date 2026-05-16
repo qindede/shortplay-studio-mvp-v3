@@ -548,6 +548,25 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   color: var(--text);
   transform: translateY(-1px);
 }
+.outline-generate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.episode-count-select {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.episode-count-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
 .btn-text {
   height: 30px;
   padding: 0 9px;
@@ -2394,7 +2413,6 @@ textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255,255,255,0.04);
-  overflow: hidden;
 }
 .outline-preview-head {
   padding: 14px;
@@ -2408,6 +2426,8 @@ textarea {
   display: grid;
   gap: 10px;
   padding: 14px;
+  max-height: 360px;
+  overflow-y: auto;
 }
 .outline-item {
   display: flex;

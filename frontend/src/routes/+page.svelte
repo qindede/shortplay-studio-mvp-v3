@@ -84,6 +84,7 @@
   let projectDescription = '';
   let outlineCost = 20;
   let storyboardCost = 20;
+  let episodeCount = 6;
   let outlineEpisodes: ProjectOutlineEpisode[] = [];
   let outlineLoading = false;
   let projectSubmitting = false;
@@ -130,6 +131,7 @@
     editingProject = null;
     projectName = '';
     projectDescription = '';
+    episodeCount = 6;
     outlineEpisodes = [];
     outlineLoading = false;
     projectSubmitting = false;
@@ -419,7 +421,8 @@
     try {
       const outline = await api.generateProjectOutline({
         name,
-        description
+        description,
+        episode_count: episodeCount
       });
       outlineCost = outline.cost;
       outlineEpisodes = outline.episodes;
@@ -1053,13 +1056,20 @@
 
         <div class="modal-actions" class:modal-actions-split={!editingProject} class:modal-actions-right-only={editingProject}>
           {#if !editingProject}
-            <button
-              class="btn btn-outline-generate"
-              disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}
-              on:click={generateProjectOutline}
-            >
-              {outlineLoading ? '生成中...' : `✨智能生成大纲（ ${outlineCost} 积分 ）`}
-            </button>
+            <div class="outline-generate-row">
+              <select class="episode-count-select" bind:value={episodeCount} disabled={outlineLoading || projectSubmitting}>
+                {#each [3,4,5,6,8,10,12,16,20,24] as n}
+                  <option value={n}>{n} 集</option>
+                {/each}
+              </select>
+              <button
+                class="btn btn-outline-generate"
+                disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}
+                on:click={generateProjectOutline}
+              >
+                {outlineLoading ? '生成中...' : `✨智能生成大纲（ ${outlineCost} 积分 ）`}
+              </button>
+            </div>
           {/if}
 
           <div class="modal-action-right">
