@@ -229,6 +229,65 @@ def dashboard(user: dict = Depends(get_current_user)):
     }
 
 
+@router.get("/workspace/bootstrap")
+def workspace_bootstrap(user: dict = Depends(get_current_user)):
+    data = snapshot()
+    user_projects = get_user_projects(data, user["id"])
+    project_ids = {p["id"] for p in user_projects}
+    dashboard_data = {
+        "project_count": len(user_projects),
+        "episode_count": len([e for e in data["episodes"] if e["project_id"] in project_ids]),
+        "version_count": len([v for v in data["video_versions"] if v["project_id"] in project_ids]),
+        "asset_count": len([a for a in data["assets"] if a["project_id"] in project_ids]),
+        "usage": usage_with_members(data, user["id"]),
+        "current_user": user,
+    }
+    ledger_rows = [e for e in data.get("point_ledger", []) if e["user_id"] == user["id"]]
+    projects = [enrich_project(data, p) for p in user_projects]
+
+    current_project = projects[0] if projects else None
+    project_episodes: list[dict] = []
+    project_assets: list[dict] = []
+    selected_episode = None
+    episode_shots: list[dict] = []
+    episode_tasks: list[dict] = []
+    project_versions: list[dict] = []
+
+    if current_project:
+        project_episodes = [e for e in data["episodes"] if e["project_id"] == current_project["id"]]
+        project_episodes.sort(key=lambda x: x["no"])
+        project_episodes = [enrich_episode(data, e) for e in project_episodes]
+        project_assets = [a for a in data["assets"] if a["project_id"] == current_project["id"]]
+
+        if project_episodes:
+            selected_episode = project_episodes[0]
+            episode_shots = [s for s in data["shots"] if s["episode_id"] == selected_episode["id"]]
+            episode_shots.sort(key=lambda x: x["no"])
+            episode_tasks = [t for t in data["video_tasks"] if t["episode_id"] == selected_episode["id"]]
+            episode_tasks.sort(key=lambda x: x["updated_at"], reverse=True)
+            project_versions = [
+                v
+                for v in data["video_versions"]
+                if v["project_id"] == current_project["id"] and v["episode_id"] == selected_episode["id"]
+            ]
+        else:
+            project_versions = [v for v in data["video_versions"] if v["project_id"] == current_project["id"]]
+        project_versions.sort(key=lambda x: x["created_at"], reverse=True)
+
+    return {
+        "dashboard": dashboard_data,
+        "point_ledger": {"items": ledger_rows[:10], "total": len(ledger_rows)},
+        "projects": projects,
+        "current_project": current_project,
+        "episodes": project_episodes,
+        "selected_episode": selected_episode,
+        "shots": episode_shots,
+        "assets": project_assets,
+        "video_tasks": episode_tasks,
+        "versions": project_versions,
+    }
+
+
 @router.post("/optimize-prompt")
 def optimize_prompt_endpoint(payload: PromptOptimizeRequest, user: dict = Depends(get_current_user)):
     try:

@@ -107,6 +107,19 @@ export interface Dashboard {
   current_user?: User;
 }
 
+export interface WorkspaceBootstrap {
+  dashboard: Dashboard;
+  point_ledger: PointLedgerResponse;
+  projects: Project[];
+  current_project: Project | null;
+  episodes: Episode[];
+  selected_episode: Episode | null;
+  shots: Shot[];
+  assets: Asset[];
+  video_tasks: VideoTask[];
+  versions: VideoVersion[];
+}
+
 export interface Usage {
   video_total_seconds: number;
   video_used_seconds: number;
@@ -275,6 +288,7 @@ export const api = {
     request<{ ok: boolean }>('/api/me/password', { method: 'PATCH', body: JSON.stringify(body) }),
   myLedger: (page = 1, pageSize = 10) => request<PointLedgerResponse>(`/api/me/point-ledger?page=${page}&page_size=${pageSize}`),
 
+  workspaceBootstrap: () => request<WorkspaceBootstrap>('/api/workspace/bootstrap'),
   dashboard: () => request<Dashboard>('/api/dashboard'),
   projects: () => request<Project[]>('/api/projects'),
   createProject: (body: { name: string; description: string; owner?: string; episodes?: ProjectOutlineEpisode[] }) =>

@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException
 
+from . import db_store
 from .config import AUTH_SECRET
 from .store import snapshot
 
@@ -33,8 +34,11 @@ def find_user_by_token(data: dict, token: str | None) -> dict | None:
 
 
 def get_current_user(x_user_token: Annotated[str | None, Header(alias="X-User-Token")] = None) -> dict:
-    data = snapshot()
-    user = find_user_by_token(data, x_user_token)
+    if db_store.enabled():
+        user = db_store.find_user_by_token(x_user_token)
+    else:
+        data = snapshot()
+        user = find_user_by_token(data, x_user_token)
     if not user:
         raise HTTPException(status_code=401, detail="未登录或登录已失效")
     if user.get("status") != "active":

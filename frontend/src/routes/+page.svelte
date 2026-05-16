@@ -369,17 +369,17 @@
   }
 
   async function bootData() {
-    const [dashboardData, ledgerData, projectData] = await Promise.all([
-      api.dashboard(),
-      api.myLedger(),
-      api.projects()
-    ]);
+    const bootstrap = await api.workspaceBootstrap();
 
-    dashboard = dashboardData;
+    dashboard = bootstrap.dashboard;
     usage = dashboard.usage;
     currentUser = dashboard.current_user || (await api.me());
-    pointLedger = ledgerData;
-    projects = projectData;
+    if (currentUser.role === 'admin') {
+      goto('/admin');
+      return;
+    }
+    pointLedger = bootstrap.point_ledger;
+    projects = bootstrap.projects;
 
     if (projects.length === 0) {
       currentProject = null;
@@ -393,7 +393,18 @@
       return;
     }
 
-    await selectProject(projects[0], false);
+    currentProject = bootstrap.current_project;
+    episodes = bootstrap.episodes;
+    assets = bootstrap.assets;
+    selectedEpisode = bootstrap.selected_episode;
+    shots = bootstrap.shots;
+    videoTasks = bootstrap.video_tasks;
+    versions = bootstrap.versions;
+    if (selectedEpisode) {
+      fillEpisodeForm(selectedEpisode);
+    } else {
+      resetEpisodeForm();
+    }
   }
 
   async function refreshDashboard() {

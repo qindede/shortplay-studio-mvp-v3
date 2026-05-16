@@ -4,6 +4,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from .. import db_store
 from ..schemas import ChangePasswordRequest, LoginRequest, RegisterRequest
 from ..security import get_current_user, hash_password, public_user
 from ..services import change_points
@@ -44,6 +45,20 @@ def register(payload: RegisterRequest):
 @router.post("/auth/login")
 def login(payload: LoginRequest):
     username = payload.username.strip().lower()
+
+    if db_store.enabled():
+        user = db_store.find_user_by_username(username)
+        if not user or user.get("password_hash") != hash_password(payload.password):
+            raise HTTPException(status_code=401, detail="用户名或密码错误")
+        if user.get("status") != "active":
+            raise HTTPException(status_code=403, detail="账号已被禁用")
+
+        token = secrets.token_urlsafe(24)
+        last_login = now()
+        db_store.update_user_login(user["id"], token, last_login)
+        user["token"] = token
+        user["last_login"] = last_login
+        return {"user": public_user(user), "token": token}
 
     def mutate(data):
         user = next((u for u in data.get("users", []) if u["username"].lower() == username), None)

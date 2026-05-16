@@ -25,6 +25,50 @@ def enabled() -> bool:
     return SessionLocal is not None
 
 
+def _user_dict(row: User) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "username": row.username,
+        "display_name": row.display_name,
+        "password_hash": row.password_hash,
+        "role": row.role,
+        "status": row.status,
+        "points": row.points,
+        "token": row.token or "",
+        "usage": row.usage_json or {},
+        "created_at": _fmt(row.created_at),
+        "last_login": _fmt(row.last_login_at),
+    }
+
+
+def find_user_by_token(token: str | None) -> dict[str, Any] | None:
+    if SessionLocal is None or not token:
+        return None
+    with SessionLocal() as db:
+        user = db.scalar(select(User).where(User.token == token))
+        return _user_dict(user) if user else None
+
+
+def find_user_by_username(username: str) -> dict[str, Any] | None:
+    if SessionLocal is None:
+        return None
+    with SessionLocal() as db:
+        user = db.scalar(select(User).where(User.username == username))
+        return _user_dict(user) if user else None
+
+
+def update_user_login(user_id: str, token: str, last_login: str) -> None:
+    if SessionLocal is None:
+        raise RuntimeError("DATABASE_URL is not configured")
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        if not user:
+            return
+        user.token = token
+        user.last_login_at = _dt(last_login)
+        db.commit()
+
+
 def _fmt(value: Any) -> str:
     if isinstance(value, datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
