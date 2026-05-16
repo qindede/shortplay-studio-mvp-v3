@@ -216,6 +216,9 @@ def create_generated_asset_payload(project_id: str, payload: dict, generated_url
 
 @router.get("/dashboard")
 def dashboard(user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        return db_store.dashboard(user)
+
     data = snapshot()
     user_projects = get_user_projects(data, user["id"])
     project_ids = {p["id"] for p in user_projects}
@@ -301,12 +304,18 @@ def optimize_prompt_endpoint(payload: PromptOptimizeRequest, user: dict = Depend
 
 @router.get("/projects")
 def list_projects(user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        return db_store.list_projects(user)
+
     data = snapshot()
     return [enrich_project(data, p) for p in get_user_projects(data, user["id"])]
 
 
 @router.post("/projects")
 def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        return db_store.create_project(user, payload, now())
+
     def mutate(data):
         ts = now()
         project = {
@@ -345,6 +354,13 @@ def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depen
     except AIError as exc:
         raise ai_error(exc) from exc
 
+    if db_store.enabled():
+        cost = POINT_RULES["outline"]
+        result = db_store.consume_with_job(user["id"], cost, "生成短剧大纲", f"智能生成《{payload.name}》短剧大纲", "outline", "minimax", now())
+        if result.get("error") == "insufficient_points":
+            raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
+        return {"cost": cost, "episodes": episodes}
+
     def mutate(data):
         cost = POINT_RULES["outline"]
         change_points(data, user["id"], -cost, "consume", "生成短剧大纲", f"智能生成《{payload.name}》短剧大纲")
@@ -356,12 +372,24 @@ def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depen
 
 @router.get("/projects/{project_id}")
 def get_project(project_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        project = db_store.get_project(user, project_id)
+        if not project:
+            not_found("project")
+        return project
+
     data = snapshot()
     return enrich_project(data, verify_project_ownership(data, project_id, user["id"]))
 
 
 @router.put("/projects/{project_id}")
 def update_project(project_id: str, payload: ProjectUpdate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        project = db_store.update_project(user, project_id, payload, now())
+        if not project:
+            not_found("project")
+        return project
+
     def mutate(data):
         project = verify_project_ownership(data, project_id, user["id"])
         updates = payload.model_dump(exclude_none=True)
@@ -380,6 +408,11 @@ def update_project(project_id: str, payload: ProjectUpdate, user: dict = Depends
 
 @router.delete("/projects/{project_id}")
 def delete_project(project_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        if not db_store.delete_project(user, project_id):
+            not_found("project")
+        return {"ok": True}
+
     def mutate(data):
         verify_project_ownership(data, project_id, user["id"])
         episode_ids = {e["id"] for e in data["episodes"] if e["project_id"] == project_id}
@@ -397,6 +430,12 @@ def delete_project(project_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/projects/{project_id}/episodes")
 def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        episodes = db_store.list_episodes(user, project_id)
+        if episodes is None:
+            not_found("project")
+        return episodes
+
     data = snapshot()
     verify_project_ownership(data, project_id, user["id"])
     episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
@@ -406,6 +445,12 @@ def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/projects/{project_id}/episodes")
 def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        episode = db_store.create_episode(user, project_id, payload, now())
+        if not episode:
+            not_found("project")
+        return episode
+
     def mutate(data):
         verify_project_ownership(data, project_id, user["id"])
         project_episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
@@ -430,6 +475,12 @@ def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends
 
 @router.get("/episodes/{episode_id}")
 def get_episode(episode_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        episode = db_store.get_episode(user, episode_id)
+        if not episode:
+            not_found("episode")
+        return episode
+
     data = snapshot()
     episode = find_by_id(data["episodes"], episode_id, "episode")
     verify_project_ownership(data, episode["project_id"], user["id"])
@@ -458,6 +509,12 @@ def get_episode_workspace(episode_id: str, user: dict = Depends(get_current_user
 
 @router.put("/episodes/{episode_id}")
 def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        episode = db_store.update_episode(user, episode_id, payload, now())
+        if not episode:
+            not_found("episode")
+        return episode
+
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
         verify_project_ownership(data, episode["project_id"], user["id"])
@@ -470,6 +527,12 @@ def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends
 
 @router.delete("/episodes/{episode_id}")
 def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        ok, _project_id = db_store.delete_episode(user, episode_id, now())
+        if not ok:
+            not_found("episode")
+        return {"ok": True}
+
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
         verify_project_ownership(data, episode["project_id"], user["id"])
@@ -487,6 +550,12 @@ def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/episodes/{episode_id}/shots")
 def list_shots(episode_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        shots = db_store.list_shots(user, episode_id)
+        if shots is None:
+            not_found("episode")
+        return shots
+
     data = snapshot()
     episode = find_by_id(data["episodes"], episode_id, "episode")
     verify_project_ownership(data, episode["project_id"], user["id"])
@@ -497,6 +566,12 @@ def list_shots(episode_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/episodes/{episode_id}/shots")
 def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        shot = db_store.create_shot(user, episode_id, payload, uid("shot"), now())
+        if shot is None:
+            not_found("episode")
+        return shot
+
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
         verify_project_ownership(data, episode["project_id"], user["id"])
@@ -525,6 +600,20 @@ def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_c
 
 @router.post("/episodes/{episode_id}/prepare-storyboard", response_model=StoryboardPrepareResponse)
 def prepare_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        context = db_store.episode_generation_context(user, episode_id)
+        if not context:
+            not_found("episode")
+        try:
+            ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], context["assets"])
+        except AIError as exc:
+            raise ai_error(exc) from exc
+        return {
+            "cost": POINT_RULES["storyboard"],
+            "asset_cost": POINT_RULES["image_asset"],
+            "missing_assets": storyboard_missing_assets(ai_shots, context["assets"]),
+        }
+
     current = snapshot()
     episode = find_by_id(current["episodes"], episode_id, "episode")
     project = verify_project_ownership(current, episode["project_id"], user["id"])
@@ -542,6 +631,37 @@ def prepare_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/episodes/{episode_id}/generate-storyboard")
 def generate_storyboard(episode_id: str, payload: StoryboardGenerateRequest | None = None, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        context = db_store.episode_generation_context(user, episode_id)
+        if not context:
+            not_found("episode")
+        existing_assets = context["assets"]
+        confirmed_assets = [item.model_dump() for item in (payload.confirmed_assets if payload else [])]
+        existing_names = {
+            item
+            for asset in existing_assets
+            for item in comparable_asset_names(asset)
+            if asset.get("type") in {"character", "scene"}
+        }
+        assets_to_generate = [item for item in confirmed_assets if item["name"].strip() not in existing_names]
+        generated_assets: list[dict] = []
+        for item in assets_to_generate:
+            try:
+                generated_url = ai_image.generate_image(item["prompt"])
+            except AIError as exc:
+                raise ai_error(exc) from exc
+            generated_assets.append(create_generated_asset_payload(context["project"]["id"], item, generated_url))
+        try:
+            ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], existing_assets + generated_assets)
+        except AIError as exc:
+            raise ai_error(exc) from exc
+        result = db_store.save_storyboard(user, episode_id, ai_shots, generated_assets, POINT_RULES["storyboard"], POINT_RULES["image_asset"], now())
+        if result is None:
+            not_found("episode")
+        if isinstance(result, dict) and result.get("error") == "insufficient_points":
+            raise HTTPException(status_code=402, detail="积分不足")
+        return result
+
     current = snapshot()
     episode = find_by_id(current["episodes"], episode_id, "episode")
     project = verify_project_ownership(current, episode["project_id"], user["id"])
@@ -616,6 +736,12 @@ def generate_storyboard(episode_id: str, payload: StoryboardGenerateRequest | No
 
 @router.patch("/shots/{shot_id}")
 def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        shot = db_store.patch_shot(user, shot_id, payload, now())
+        if not shot:
+            not_found("shot")
+        return shot
+
     def mutate(data):
         shot = find_by_id(data["shots"], shot_id, "shot")
         episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
@@ -640,6 +766,11 @@ def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_curre
 
 @router.delete("/shots/{shot_id}")
 def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        if not db_store.delete_shot(user, shot_id, now()):
+            not_found("shot")
+        return {"ok": True}
+
     def mutate(data):
         shot = find_by_id(data["shots"], shot_id, "shot")
         episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
@@ -657,6 +788,12 @@ def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/episodes/{episode_id}/video-tasks")
 def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        payload = db_store.episode_workspace(user, episode_id)
+        if payload is None:
+            not_found("episode")
+        return payload["video_tasks"]
+
     def mutate(data):
         episode = find_by_id(data["episodes"], episode_id, "episode")
         verify_project_ownership(data, episode["project_id"], user["id"])
@@ -697,6 +834,25 @@ def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/shots/{shot_id}/generate-video")
 def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        context = db_store.shot_generation_context(user, shot_id)
+        if not context:
+            not_found("shot")
+        data = {
+            "episodes": [context["episode"]] if context.get("episode") else [],
+            "assets": context.get("assets", []),
+        }
+        try:
+            provider_task_id = ai_video.create_video_task(context["shot"].get("visual") or context["shot"]["title"], find_reference_image(data, context["shot"]), context["shot"]["duration"])
+        except AIError as exc:
+            raise ai_error(exc) from exc
+        task = db_store.create_video_task(user, shot_id, provider_task_id, POINT_RULES["video_second"], now())
+        if task is None:
+            not_found("shot")
+        if task.get("error") == "insufficient_points":
+            raise HTTPException(status_code=402, detail="积分不足")
+        return task
+
     current = snapshot()
     shot = find_by_id(current["shots"], shot_id, "shot")
     episode = next((e for e in current["episodes"] if e["id"] == shot["episode_id"]), None)
@@ -753,6 +909,33 @@ def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)
 
 @router.post("/episodes/{episode_id}/generate-videos")
 def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        context = db_store.episode_generation_context(user, episode_id)
+        if not context:
+            not_found("episode")
+        shots = context.get("shots", [])
+        if not shots:
+            not_found("shots")
+        data = {
+            "episodes": [context["episode"]],
+            "assets": context.get("assets", []),
+        }
+        try:
+            provider_tasks = {
+                shot["id"]: ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(data, shot), shot["duration"])
+                for shot in shots
+            }
+        except AIError as exc:
+            raise ai_error(exc) from exc
+        tasks = []
+        for shot in shots:
+            task = db_store.create_video_task(user, shot["id"], provider_tasks[shot["id"]], POINT_RULES["video_second"], now())
+            if isinstance(task, dict) and task.get("error") == "insufficient_points":
+                raise HTTPException(status_code=402, detail="积分不足")
+            if task:
+                tasks.append(task)
+        return tasks
+
     current = snapshot()
     episode = find_by_id(current["episodes"], episode_id, "episode")
     verify_project_ownership(current, episode["project_id"], user["id"])
@@ -816,6 +999,12 @@ def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user))
 
 @router.get("/projects/{project_id}/assets")
 def list_assets(project_id: str, type: str | None = None, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        assets = db_store.list_assets(user, project_id, type)
+        if assets is None:
+            not_found("project")
+        return assets
+
     data = snapshot()
     verify_project_ownership(data, project_id, user["id"])
     assets = [a for a in data["assets"] if a["project_id"] == project_id]
@@ -826,6 +1015,16 @@ def list_assets(project_id: str, type: str | None = None, user: dict = Depends(g
 
 @router.post("/projects/{project_id}/assets")
 def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        visual_asset = payload.type in {"character", "scene", "image"}
+        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
+        asset = db_store.create_asset(user, project_id, payload, normalize_refs(payload.references), cost, now())
+        if asset is None:
+            not_found("project")
+        if asset.get("error") == "points":
+            raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
+        return asset
+
     def mutate(data):
         verify_project_ownership(data, project_id, user["id"])
         visual_asset = payload.type in {"character", "scene", "image"}
@@ -869,6 +1068,22 @@ def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends
     else:
         generated_url = None
 
+    if db_store.enabled():
+        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
+        refs = [{
+            "id": uid("ref"),
+            "type": "image" if visual_asset else "audio",
+            "name": f"AI 生成 - {payload.name}",
+            "url": generated_url,
+            "note": payload.prompt,
+        }]
+        asset = db_store.generate_asset(user, project_id, payload, generated_url, refs, cost, "seedream" if visual_asset else "manual", now())
+        if asset is None:
+            not_found("project")
+        if asset.get("error") == "insufficient_points":
+            raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
+        return asset
+
     def mutate(data):
         verify_project_ownership(data, project_id, user["id"])
         cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
@@ -908,6 +1123,14 @@ def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends
 
 @router.put("/assets/{asset_id}")
 def update_asset(asset_id: str, payload: AssetUpdate, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        update_data = payload.model_dump(exclude_unset=True)
+        refs = normalize_refs(update_data["references"]) if "references" in update_data and update_data["references"] is not None else None
+        asset = db_store.update_asset(user, asset_id, payload, refs, now())
+        if not asset:
+            not_found("asset")
+        return asset
+
     def mutate(data):
         asset = find_by_id(data["assets"], asset_id, "asset")
         verify_project_ownership(data, asset["project_id"], user["id"])
@@ -925,6 +1148,11 @@ def update_asset(asset_id: str, payload: AssetUpdate, user: dict = Depends(get_c
 
 @router.delete("/assets/{asset_id}")
 def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        if not db_store.delete_asset(user, asset_id):
+            not_found("asset")
+        return {"ok": True}
+
     def mutate(data):
         asset = find_by_id(data["assets"], asset_id, "asset")
         verify_project_ownership(data, asset["project_id"], user["id"])
@@ -938,6 +1166,24 @@ def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
 def start_voice_clone(asset_id: str, payload: VoiceCloneRequest, user: dict = Depends(get_current_user)):
     if not payload.consent:
         raise HTTPException(status_code=400, detail="请确认已获得声音授权")
+    if db_store.enabled():
+        asset = db_store.get_asset(user, asset_id)
+        if not asset:
+            not_found("asset")
+        voice_url = payload.voice_url or asset.get("voice_url")
+        if not voice_url or not voice_url.startswith("/uploads/"):
+            raise HTTPException(status_code=400, detail="请先上传角色声音样本")
+        try:
+            audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
+            speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
+            result = ai_voice.clone_voice(speaker_id, audio, Path(voice_url).suffix.lstrip(".") or "wav")
+        except (AIError, storage.StorageError) as exc:
+            raise HTTPException(status_code=503, detail=getattr(exc, "public_message", str(exc))) from exc
+        updated = db_store.update_voice_clone(user, asset_id, result, POINT_RULES["voice_clone"], now(), consume=True)
+        if isinstance(updated, dict) and updated.get("error") == "insufficient_points":
+            raise HTTPException(status_code=402, detail="积分不足")
+        return updated
+
     current = snapshot()
     asset = find_by_id(current["assets"], asset_id, "asset")
     verify_project_ownership(current, asset["project_id"], user["id"])
@@ -979,6 +1225,18 @@ def start_voice_clone(asset_id: str, payload: VoiceCloneRequest, user: dict = De
 
 @router.get("/assets/{asset_id}/voice-clone")
 def get_voice_clone(asset_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        asset = db_store.get_asset(user, asset_id)
+        if not asset:
+            not_found("asset")
+        if not asset.get("speaker_id"):
+            return asset
+        try:
+            result = ai_voice.get_voice(asset["speaker_id"])
+        except AIError as exc:
+            raise ai_error(exc) from exc
+        return db_store.update_voice_clone(user, asset_id, result, 0, now(), consume=False)
+
     current = snapshot()
     asset = find_by_id(current["assets"], asset_id, "asset")
     verify_project_ownership(current, asset["project_id"], user["id"])
@@ -1021,6 +1279,12 @@ def get_voice_clone(asset_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/projects/{project_id}/video-versions")
 def list_video_versions(project_id: str, episode_id: str | None = None, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        versions = db_store.list_video_versions(user, project_id, episode_id)
+        if versions is None:
+            not_found("project")
+        return versions
+
     data = snapshot()
     verify_project_ownership(data, project_id, user["id"])
     versions = [v for v in data["video_versions"] if v["project_id"] == project_id]
@@ -1032,6 +1296,11 @@ def list_video_versions(project_id: str, episode_id: str | None = None, user: di
 
 @router.delete("/video-versions/{version_id}")
 def delete_video_version(version_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        if not db_store.delete_video_version(user, version_id):
+            not_found("version")
+        return {"ok": True}
+
     def mutate(data):
         version = find_by_id(data["video_versions"], version_id, "version")
         verify_project_ownership(data, version["project_id"], user["id"])
@@ -1072,6 +1341,20 @@ def compose_video_file(tasks: list[dict]) -> str:
 
 @router.post("/episodes/{episode_id}/compose")
 def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        context = db_store.compose_context(user, episode_id)
+        if not context:
+            not_found("episode")
+        shots = context.get("shots", [])
+        if not shots or any(shot.get("status") != "completed" for shot in shots):
+            raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
+        shot_order = {shot["id"]: shot["no"] for shot in shots}
+        video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
+        version = db_store.save_composed_version(user, episode_id, payload, video_url, POINT_RULES["compose"], now())
+        if isinstance(version, dict) and version.get("error") == "insufficient_points":
+            raise HTTPException(status_code=402, detail="积分不足")
+        return version
+
     current = snapshot()
     episode = find_by_id(current["episodes"], episode_id, "episode")
     verify_project_ownership(current, episode["project_id"], user["id"])
@@ -1114,6 +1397,14 @@ def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depen
 
 @router.get("/ai-jobs/{job_id}")
 def get_ai_job(job_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        job = db_store.get_ai_job(user, job_id)
+        if not job:
+            not_found("ai job")
+        if job.get("error") == "forbidden":
+            raise HTTPException(status_code=403, detail="无权访问该任务")
+        return job
+
     data = snapshot()
     job = find_by_id(data.get("ai_jobs", []), job_id, "ai job")
     if job.get("user_id") != user["id"] and user.get("role") != "admin":
@@ -1123,6 +1414,12 @@ def get_ai_job(job_id: str, user: dict = Depends(get_current_user)):
 
 @router.get("/projects/{project_id}/ai-jobs")
 def list_project_ai_jobs(project_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        jobs = db_store.list_project_ai_jobs(user, project_id)
+        if jobs is None:
+            not_found("project")
+        return jobs
+
     data = snapshot()
     verify_project_ownership(data, project_id, user["id"])
     return [job for job in data.get("ai_jobs", []) if job.get("project_id") == project_id][:100]
@@ -1130,6 +1427,9 @@ def list_project_ai_jobs(project_id: str, user: dict = Depends(get_current_user)
 
 @router.get("/usage")
 def usage(user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        return db_store.usage(user)
+
     data = snapshot()
     return usage_with_members(data, user["id"])
 

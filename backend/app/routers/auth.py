@@ -18,6 +18,13 @@ def register(payload: RegisterRequest):
     username = payload.username.strip().lower()
     display_name = payload.display_name.strip() or username
 
+    if db_store.enabled():
+        token = secrets.token_urlsafe(24)
+        user = db_store.register_user(username, display_name, hash_password(payload.password), token, now())
+        if user is None:
+            raise HTTPException(status_code=409, detail="用户名已存在")
+        return {"user": public_user(user), "token": token}
+
     def mutate(data):
         if any(u["username"].lower() == username for u in data.get("users", [])):
             raise HTTPException(status_code=409, detail="用户名已存在")
@@ -78,6 +85,14 @@ def me(user: dict = Depends(get_current_user)):
 
 @router.patch("/me/password")
 def change_my_password(payload: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        result = db_store.change_password(user["id"], hash_password(payload.current_password), hash_password(payload.new_password))
+        if result == "missing":
+            raise HTTPException(status_code=404, detail="用户不存在")
+        if result == "bad_password":
+            raise HTTPException(status_code=400, detail="当前密码不正确")
+        return {"ok": True}
+
     def mutate(data):
         target = next((u for u in data.get("users", []) if u["id"] == user["id"]), None)
         if not target:
@@ -92,6 +107,9 @@ def change_my_password(payload: ChangePasswordRequest, user: dict = Depends(get_
 
 @router.get("/me/point-ledger")
 def my_point_ledger(page: int = 1, page_size: int = 10, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        return db_store.point_ledger(user, page, page_size)
+
     data = snapshot()
     rows = [e for e in data.get("point_ledger", []) if e["user_id"] == user["id"]]
     total = len(rows)

@@ -839,8 +839,15 @@
       const createdShot = await api.createShot(episode.id, payload);
       shots = [...shots, createdShot].sort((a, b) => a.no - b.no);
       if (currentProject) {
-        episodes = await api.episodes(currentProject.id);
-        selectedEpisode = episodes.find((item) => item.id === episode.id) || selectedEpisode;
+        const updatedEpisode = {
+          ...episode,
+          status: 'storyboard_ready' as const,
+          status_label: '分镜就绪',
+          shot_count: shots.length,
+          updated_at: createdShot.updated_at
+        };
+        episodes = episodes.map((item) => (item.id === episode.id ? updatedEpisode : item));
+        selectedEpisode = updatedEpisode;
       }
     } catch (err) {
       error = err instanceof Error ? err.message : '操作失败';
