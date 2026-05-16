@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import math
 from typing import Any
 
 from pydantic import ValidationError
@@ -15,6 +16,18 @@ from .schemas import OutlineResult, StoryboardResult
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 _FENCE_RE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+_INT_RE = re.compile(r"\d+")
+
+
+_STORYBOARD_LIST_KEYS = ("shots", "storyboard", "分镜", "镜头", "镜头列表", "shot_list")
+_STORYBOARD_FIELD_KEYS = {
+    "title": ("title", "标题", "镜头标题", "名称", "name"),
+    "visual": ("visual", "画面", "画面描述", "视觉描述", "镜头描述", "description"),
+    "dialogue": ("dialogue", "台词", "对白", "旁白", "line", "lines"),
+    "characters": ("characters", "角色", "人物", "出场人物", "character"),
+    "scene": ("scene", "场景", "地点", "场景地点", "location"),
+    "duration": ("duration", "时长", "镜头时长", "秒数", "duration_seconds"),
+}
 
 
 def _strip_think_tags(text: str) -> str:
@@ -63,6 +76,91 @@ def _chat_json(system: str, user: str, timeout: float | None = None) -> Any:
         raise AIOutputSchemaError("LLM did not return valid JSON") from exc
 
 
+def _first_value(data: dict, keys: tuple[str, ...], default: Any = "") -> Any:
+    for key in keys:
+        value = data.get(key)
+        if value is not None:
+            return value
+    return default
+
+
+def _coerce_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return " ".join(_coerce_text(item) for item in value if item is not None).strip()
+    return str(value).strip()
+
+
+def _coerce_characters(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [_coerce_text(item) for item in value if _coerce_text(item)]
+    text = _coerce_text(value)
+    if not text:
+        return []
+    return [item.strip() for item in re.split(r"[,，、/]\s*", text) if item.strip()]
+
+
+def _coerce_duration(value: Any) -> int:
+    if isinstance(value, int):
+        duration = value
+    elif isinstance(value, float):
+        duration = round(value)
+    else:
+        match = _INT_RE.search(_coerce_text(value))
+        duration = int(match.group()) if match else 3
+    return max(1, min(60, duration))
+
+
+def _normalize_storyboard_data(data: Any) -> dict:
+    if isinstance(data, list):
+        shots = data
+    elif isinstance(data, dict):
+        shots = None
+        for key in _STORYBOARD_LIST_KEYS:
+            value = data.get(key)
+            if isinstance(value, list):
+                shots = value
+                break
+        if shots is None:
+            shots = [data]
+    else:
+        return {"shots": []}
+
+    normalized = []
+    for index, item in enumerate(shots, start=1):
+        if not isinstance(item, dict):
+            continue
+        title = _coerce_text(_first_value(item, _STORYBOARD_FIELD_KEYS["title"]))
+        visual = _coerce_text(_first_value(item, _STORYBOARD_FIELD_KEYS["visual"]))
+        dialogue = _coerce_text(_first_value(item, _STORYBOARD_FIELD_KEYS["dialogue"]))
+        scene = _coerce_text(_first_value(item, _STORYBOARD_FIELD_KEYS["scene"]))
+        normalized.append(
+            {
+                "title": title or f"镜头 {index}",
+                "visual": visual,
+                "dialogue": dialogue,
+                "characters": _coerce_characters(_first_value(item, _STORYBOARD_FIELD_KEYS["characters"], [])),
+                "scene": scene,
+                "duration": _coerce_duration(_first_value(item, _STORYBOARD_FIELD_KEYS["duration"], 3)),
+            }
+        )
+    return {"shots": normalized}
+
+
+def _storyboard_shot_count(episode: dict) -> int:
+    duration = episode.get("duration_target") or episode.get("duration") or 30
+    try:
+        seconds = int(duration)
+    except (TypeError, ValueError):
+        seconds = 30
+    return max(4, min(12, math.ceil(seconds / 5)))
+
+
 def _chat_text(system: str, user: str, timeout: float | None = None) -> str:
     key = require_key(AI.minimax_api_key, "MINIMAX_API_KEY")
     payload = {
@@ -107,6 +205,7 @@ def generate_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]:
 
 def generate_storyboard(project: dict, episode: dict, assets: list[dict]) -> list[dict]:
     asset_text = "\n".join(f"- {a.get('type')}: {a.get('name')} {a.get('description', '')}" for a in assets[:20])
+    shot_count = _storyboard_shot_count(episode)
     data = _chat_json(
         (
             "你是短剧分镜师。只返回 JSON，不要输出任何其他文字。\n"
@@ -114,6 +213,8 @@ def generate_storyboard(project: dict, episode: dict, assets: list[dict]) -> lis
             '{"shots": [\n'
             '  {"title": "镜头标题", "visual": "画面描述", "dialogue": "台词", "characters": ["角色名"], "scene": "场景", "duration": 3}\n'
             "]}\n"
+            "必须使用英文键名 shots/title/visual/dialogue/characters/scene/duration。"
+            "不要使用中文键名，不要返回 markdown，不要把 JSON 放进字符串。"
             "字段说明：title(字符串,必填), visual(字符串), dialogue(字符串), characters(字符串数组), scene(字符串), duration(整数,秒)。"
         ),
         (
@@ -121,12 +222,13 @@ def generate_storyboard(project: dict, episode: dict, assets: list[dict]) -> lis
             f"剧集：{episode.get('title')}\n"
             f"剧情摘要：{episode.get('summary')}\n"
             f"剧本：{episode.get('script')}\n"
-            f"可用素材：\n{asset_text}\n"
-            f"生成 {len(assets)} 个竖屏短剧分镜镜头。"
+            f"可用素材：\n{asset_text or '暂无，可根据剧情自行提取角色和场景。'}\n"
+            f"生成 {shot_count} 个竖屏短剧分镜镜头。每个镜头 2-8 秒，按剧情顺序推进。"
         ),
         timeout=AI.generation_timeout,
     )
     try:
+        data = _normalize_storyboard_data(data)
         result = StoryboardResult.model_validate(data)
     except ValidationError as exc:
         raise AIOutputSchemaError("Storyboard JSON schema validation failed") from exc
