@@ -27,6 +27,8 @@ from ..schemas import (
     PromptOptimizeRequest,
     ShotCreate,
     ShotUpdate,
+    StoryboardGenerateRequest,
+    StoryboardPrepareResponse,
     VoiceCloneRequest,
 )
 from ..security import get_current_user
@@ -139,6 +141,77 @@ def find_reference_image(data: dict, shot: dict) -> str | None:
         if media_url:
             return media_url
     return None
+
+
+def comparable_asset_names(asset: dict) -> set[str]:
+    name = (asset.get("name") or "").strip()
+    names = {name}
+    if "：" in name:
+        names.add(name.rsplit("：", 1)[-1].strip())
+    if ":" in name:
+        names.add(name.rsplit(":", 1)[-1].strip())
+    return {item for item in names if item}
+
+
+def storyboard_missing_assets(ai_shots: list[dict], assets: list[dict]) -> list[dict]:
+    existing = {
+        "character": set().union(*(comparable_asset_names(asset) for asset in assets if asset.get("type") == "character")),
+        "scene": set().union(*(comparable_asset_names(asset) for asset in assets if asset.get("type") == "scene")),
+    }
+    missing: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add_candidate(asset_type: str, name: str, description: str) -> None:
+        clean_name = name.strip()
+        if not clean_name or clean_name in existing[asset_type]:
+            return
+        key = (asset_type, clean_name)
+        if key in seen:
+            return
+        seen.add(key)
+        label = "角色" if asset_type == "character" else "场景"
+        missing.append({
+            "type": asset_type,
+            "name": clean_name,
+            "description": description or f"本集分镜中出现的新{label}",
+            "prompt": f"{clean_name}，{description or f'短剧本集需要使用的新{label}'}",
+        })
+
+    for shot in ai_shots:
+        visual = shot.get("visual", "")
+        dialogue = shot.get("dialogue", "")
+        context = "；".join(part for part in [visual, dialogue] if part)
+        for character in shot.get("characters") or []:
+            add_candidate("character", str(character), context)
+        add_candidate("scene", str(shot.get("scene") or ""), visual)
+
+    return missing
+
+
+def create_generated_asset_payload(project_id: str, payload: dict, generated_url: str | None) -> dict:
+    visual_asset = payload["type"] in {"character", "scene", "image"}
+    ts = now()
+    refs = [{
+        "id": uid("ref"),
+        "type": "image" if visual_asset else "audio",
+        "name": f"AI 生成 - {payload['name']}",
+        "url": generated_url,
+        "note": payload["prompt"],
+    }]
+    return {
+        "id": uid("asset"),
+        "project_id": project_id,
+        "type": payload["type"],
+        "name": payload["name"],
+        "description": payload.get("description", ""),
+        "ref_count": len(refs),
+        "initial": payload["name"][:1],
+        "image": generated_url,
+        "voice": None,
+        "voice_url": None,
+        "references": refs,
+        "updated_at": ts,
+    }
 
 
 @router.get("/dashboard")
@@ -368,8 +441,8 @@ def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_c
     return update(mutate)
 
 
-@router.post("/episodes/{episode_id}/generate-storyboard")
-def generate_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
+@router.post("/episodes/{episode_id}/prepare-storyboard", response_model=StoryboardPrepareResponse)
+def prepare_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
     current = snapshot()
     episode = find_by_id(current["episodes"], episode_id, "episode")
     project = verify_project_ownership(current, episode["project_id"], user["id"])
@@ -378,10 +451,60 @@ def generate_storyboard(episode_id: str, user: dict = Depends(get_current_user))
         ai_shots = ai_llm.generate_storyboard(project, episode, assets)
     except AIError as exc:
         raise ai_error(exc) from exc
+    return {
+        "cost": POINT_RULES["storyboard"],
+        "asset_cost": POINT_RULES["image_asset"],
+        "missing_assets": storyboard_missing_assets(ai_shots, assets),
+    }
+
+
+@router.post("/episodes/{episode_id}/generate-storyboard")
+def generate_storyboard(episode_id: str, payload: StoryboardGenerateRequest | None = None, user: dict = Depends(get_current_user)):
+    current = snapshot()
+    episode = find_by_id(current["episodes"], episode_id, "episode")
+    project = verify_project_ownership(current, episode["project_id"], user["id"])
+    existing_assets = [a for a in current["assets"] if a["project_id"] == project["id"]]
+    confirmed_assets = [item.model_dump() for item in (payload.confirmed_assets if payload else [])]
+    existing_names = {
+        item
+        for asset in existing_assets
+        for item in comparable_asset_names(asset)
+        if asset.get("type") in {"character", "scene"}
+    }
+    assets_to_generate = [item for item in confirmed_assets if item["name"].strip() not in existing_names]
+    generated_assets: list[dict] = []
+    for item in assets_to_generate:
+        try:
+            generated_url = ai_image.generate_image(item["prompt"])
+        except AIError as exc:
+            raise ai_error(exc) from exc
+        generated_assets.append(create_generated_asset_payload(project["id"], item, generated_url))
+
+    storyboard_assets = existing_assets + generated_assets
+    try:
+        ai_shots = ai_llm.generate_storyboard(project, episode, storyboard_assets)
+    except AIError as exc:
+        raise ai_error(exc) from exc
 
     def mutate(data):
         target = find_by_id(data["episodes"], episode_id, "episode")
         verify_project_ownership(data, target["project_id"], user["id"])
+        for asset in generated_assets:
+            duplicate = any(
+                existing.get("project_id") == target["project_id"]
+                and existing.get("type") == asset["type"]
+                and asset["name"] in comparable_asset_names(existing)
+                for existing in data["assets"]
+            )
+            if duplicate:
+                continue
+            asset_cost = POINT_RULES["image_asset"]
+            change_points(data, user["id"], -asset_cost, "consume", "AI 生成素材", f"AI 生成素材《{asset['name']}》")
+            add_ai_job(data, user["id"], "image_asset", "seedream", asset_cost, project_id=target["project_id"], asset_id=asset["id"])
+            data["assets"].insert(0, asset)
+            usage = get_user_usage(data, user["id"])
+            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
+
         cost = POINT_RULES["storyboard"]
         change_points(data, user["id"], -cost, "consume", "生成分镜", f"生成/更新《{target['title']}》分镜")
         add_ai_job(data, user["id"], "storyboard", "minimax", cost, episode_id=episode_id, project_id=target["project_id"])

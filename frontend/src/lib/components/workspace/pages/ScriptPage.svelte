@@ -12,6 +12,7 @@
   export let episodeSummary = '';
   export let episodeScript = '';
   export let episodeDuration = 30;
+  export let storyboardCost = 20;
   export let saveEpisodeOnly: () => void | Promise<void>;
   export let saveAndGenerateStoryboard: () => void | Promise<void>;
   export let generateVideoForShot: (shot: Shot) => void | Promise<void>;
@@ -173,7 +174,7 @@
           </div>
           <div class="panel-actions script-editor-actions">
             <button class="btn btn-secondary" on:click={saveEpisodeOnly}>保存</button>
-            <button class="btn btn-primary" on:click={saveAndGenerateStoryboard}>智能生成 / 更新分镜（10积分）</button>
+            <button class="btn btn-primary" on:click={saveAndGenerateStoryboard}>智能生成 / 更新分镜（{storyboardCost}积分）</button>
           </div>
         </div>
       </div>

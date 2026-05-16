@@ -99,6 +99,23 @@ class AssetGenerate(BaseModel):
     prompt: str = Field(min_length=1)
 
 
+class StoryboardAssetCandidate(BaseModel):
+    type: str = Field(pattern="^(character|scene)$")
+    name: str = Field(min_length=1)
+    description: str = ""
+    prompt: str = Field(min_length=1)
+
+
+class StoryboardPrepareResponse(BaseModel):
+    cost: int
+    asset_cost: int
+    missing_assets: list[StoryboardAssetCandidate] = Field(default_factory=list)
+
+
+class StoryboardGenerateRequest(BaseModel):
+    confirmed_assets: list[StoryboardAssetCandidate] = Field(default_factory=list)
+
+
 class VoiceCloneRequest(BaseModel):
     voice_url: str | None = None
     consent: bool = False

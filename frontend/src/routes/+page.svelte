@@ -15,6 +15,7 @@
     type Shot,
     type ShotPayload,
     type ShotUpdate,
+    type StoryboardAssetCandidate,
     type Usage,
     type User,
     type VideoTask,
@@ -42,6 +43,13 @@
     detail?: string;
     confirmText: string;
     resolve: (confirmed: boolean) => void;
+  };
+  type StoryboardAssetConfirmState = {
+    assets: StoryboardAssetCandidate[];
+    cost: number;
+    assetCost: number;
+    selected: Record<string, boolean>;
+    resolve: (assets: StoryboardAssetCandidate[] | null) => void;
   };
 
   let activePage: PageKey = 'projects';
@@ -90,6 +98,7 @@
   let projectSubmitting = false;
   let projectFormError = '';
   let deleteConfirm: DeleteConfirmState | null = null;
+  let storyboardAssetConfirm: StoryboardAssetConfirmState | null = null;
   let showCreateAssetModal = false;
 
   const assetTypes: Asset['type'][] = ['character', 'scene', 'image', 'audio'];
@@ -212,6 +221,54 @@
     deleteConfirm.resolve(true);
     deleteConfirm = null;
   }
+
+  function assetCandidateKey(asset: StoryboardAssetCandidate) {
+    return `${asset.type}:${asset.name}`;
+  }
+
+  function requestStoryboardAssetConfirmation(assetsToCreate: StoryboardAssetCandidate[], cost: number, assetCost: number) {
+    return new Promise<StoryboardAssetCandidate[] | null>((resolve) => {
+      storyboardAssetConfirm = {
+        assets: assetsToCreate,
+        cost,
+        assetCost,
+        selected: Object.fromEntries(assetsToCreate.map((asset) => [assetCandidateKey(asset), true])),
+        resolve
+      };
+    });
+  }
+
+  function cancelStoryboardAssetConfirm() {
+    if (!storyboardAssetConfirm) return;
+    storyboardAssetConfirm.resolve(null);
+    storyboardAssetConfirm = null;
+  }
+
+  function confirmStoryboardAssetDialog() {
+    if (!storyboardAssetConfirm) return;
+    const selectedAssets = storyboardAssetConfirm.assets.filter((asset) => storyboardAssetConfirm?.selected[assetCandidateKey(asset)]);
+    storyboardAssetConfirm.resolve(selectedAssets);
+    storyboardAssetConfirm = null;
+  }
+
+  function toggleStoryboardAsset(asset: StoryboardAssetCandidate) {
+    if (!storyboardAssetConfirm) return;
+    const key = assetCandidateKey(asset);
+    storyboardAssetConfirm = {
+      ...storyboardAssetConfirm,
+      selected: {
+        ...storyboardAssetConfirm.selected,
+        [key]: !storyboardAssetConfirm.selected[key]
+      }
+    };
+  }
+
+  $: storyboardSelectedCount = storyboardAssetConfirm
+    ? storyboardAssetConfirm.assets.filter((asset) => storyboardAssetConfirm?.selected[assetCandidateKey(asset)]).length
+    : 0;
+  $: storyboardConfirmCost = storyboardAssetConfirm
+    ? storyboardAssetConfirm.cost + storyboardSelectedCount * storyboardAssetConfirm.assetCost
+    : 0;
 
   function buildEpisodePayload() {
     return {
@@ -555,7 +612,8 @@
       await selectEpisode(episode, true);
 
       if (generateStoryboard) {
-        shots = await api.generateStoryboard(episode.id);
+        episodeDialogOpen = false;
+        await generateStoryboardWithAssetCheck(episode.id);
       }
 
       await refreshDashboard();
@@ -631,11 +689,31 @@
 
     await safeRun(async () => {
       await api.updateEpisode(episodeToUpdate.id, buildEpisodePayload());
-      shots = await api.generateStoryboard(episodeToUpdate.id);
+      await generateStoryboardWithAssetCheck(episodeToUpdate.id);
       await refreshDashboard();
       await reloadCurrentProject();
       activePage = 'script';
     });
+  }
+
+  async function generateStoryboardWithAssetCheck(episodeId: string) {
+    const preparation = await api.prepareStoryboard(episodeId);
+    let confirmedAssets: StoryboardAssetCandidate[] = [];
+
+    if (preparation.missing_assets.length > 0) {
+      const selectedAssets = await requestStoryboardAssetConfirmation(
+        preparation.missing_assets,
+        preparation.cost,
+        preparation.asset_cost
+      );
+      if (selectedAssets === null) return;
+      confirmedAssets = selectedAssets;
+    }
+
+    shots = await api.generateStoryboard(episodeId, { confirmed_assets: confirmedAssets });
+    if (currentProject) {
+      assets = await api.assets(currentProject.id);
+    }
   }
 
   async function runEpisodeVideoGeneration(episode: Episode) {
@@ -865,6 +943,7 @@
               bind:episodeSummary
               bind:episodeScript
               bind:episodeDuration
+              {storyboardCost}
               {saveEpisodeOnly}
               {saveAndGenerateStoryboard}
               {generateVideoForShot}
@@ -1074,6 +1153,71 @@
               {projectSubmitting ? (editingProject ? '保存中...' : '创建中...') : editingProject ? '保存修改' : outlineEpisodes.length > 0 ? `确认创建项目和 ${outlineEpisodes.length} 集` : '确认创建项目'}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if storyboardAssetConfirm}
+    <div class="modal-backdrop" role="presentation">
+      <div class="modal-panel storyboard-asset-modal" role="dialog" aria-modal="true" aria-labelledby="storyboard-asset-title">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title-accent" id="storyboard-asset-title">生成分镜前需要补充素材</div>
+            <div class="panel-subtitle">系统检测到本集包含项目中尚未创建的角色或场景。确认后将自动生成选中的素材，并用于后续分镜。</div>
+          </div>
+          <button class="modal-close" aria-label="关闭" on:click={cancelStoryboardAssetConfirm}>×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="storyboard-asset-summary">
+            <div>
+              <span>分镜生成</span>
+              <b>{storyboardAssetConfirm.cost} 积分</b>
+            </div>
+            <div>
+              <span>新增素材</span>
+              <b>{storyboardSelectedCount} × {storyboardAssetConfirm.assetCost} 积分</b>
+            </div>
+            <div>
+              <span>本次预计</span>
+              <b>{storyboardConfirmCost} 积分</b>
+            </div>
+          </div>
+
+          {#if pointBalance < storyboardConfirmCost}
+            <div class="inline-hint warn">当前积分 {pointBalance}，不足以完成所选素材和分镜生成。</div>
+          {/if}
+
+          <div class="storyboard-asset-list">
+            {#each storyboardAssetConfirm.assets as asset}
+              {@const key = assetCandidateKey(asset)}
+              <button
+                class="storyboard-asset-item"
+                class:selected={storyboardAssetConfirm.selected[key]}
+                type="button"
+                on:click={() => toggleStoryboardAsset(asset)}
+              >
+                <span class="status {asset.type === 'character' ? 'purple' : 'blue'}">{asset.type === 'character' ? '角色' : '场景'}</span>
+                <span class="storyboard-asset-copy">
+                  <b>{asset.name}</b>
+                  <span>{asset.description}</span>
+                </span>
+                <span class="storyboard-asset-check">{storyboardAssetConfirm.selected[key] ? '生成' : '跳过'}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" on:click={cancelStoryboardAssetConfirm}>取消</button>
+          <button
+            class="btn btn-primary"
+            disabled={pointBalance < storyboardConfirmCost}
+            on:click={confirmStoryboardAssetDialog}
+          >
+            确认并生成素材
+          </button>
         </div>
       </div>
     </div>

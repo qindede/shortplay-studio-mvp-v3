@@ -203,6 +203,19 @@ export interface AssetReference {
   note?: string;
 }
 
+export interface StoryboardAssetCandidate {
+  type: 'character' | 'scene';
+  name: string;
+  description: string;
+  prompt: string;
+}
+
+export interface StoryboardPrepareResponse {
+  cost: number;
+  asset_cost: number;
+  missing_assets: StoryboardAssetCandidate[];
+}
+
 export interface VideoTask {
   id: string;
   episode_id: string;
@@ -286,7 +299,10 @@ export const api = {
     request<Shot>(`/api/shots/${shotId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteShot: (shotId: string) =>
     request<{ ok: boolean }>(`/api/shots/${shotId}`, { method: 'DELETE' }),
-  generateStoryboard: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/generate-storyboard`, { method: 'POST' }),
+  prepareStoryboard: (episodeId: string) =>
+    request<StoryboardPrepareResponse>(`/api/episodes/${episodeId}/prepare-storyboard`, { method: 'POST' }),
+  generateStoryboard: (episodeId: string, body: { confirmed_assets?: StoryboardAssetCandidate[] } = {}) =>
+    request<Shot[]>(`/api/episodes/${episodeId}/generate-storyboard`, { method: 'POST', body: JSON.stringify(body) }),
   generateShotVideo: (shotId: string) => request<VideoTask>(`/api/shots/${shotId}/generate-video`, { method: 'POST' }),
   generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
   videoTasks: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/video-tasks`),
