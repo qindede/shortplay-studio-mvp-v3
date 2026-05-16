@@ -84,7 +84,7 @@
   let projectDescription = '';
   let outlineCost = 20;
   let storyboardCost = 20;
-  let episodeCount = 6;
+  let episodeCount = 12;
   let outlineEpisodes: ProjectOutlineEpisode[] = [];
   let outlineLoading = false;
   let projectSubmitting = false;
@@ -131,7 +131,7 @@
     editingProject = null;
     projectName = '';
     projectDescription = '';
-    episodeCount = 6;
+    episodeCount = 12;
     outlineEpisodes = [];
     outlineLoading = false;
     projectSubmitting = false;
@@ -1057,11 +1057,7 @@
         <div class="modal-actions" class:modal-actions-split={!editingProject} class:modal-actions-right-only={editingProject}>
           {#if !editingProject}
             <div class="outline-generate-row">
-              <select class="episode-count-select" bind:value={episodeCount} disabled={outlineLoading || projectSubmitting}>
-                {#each [3,4,5,6,8,10,12,16,20,24] as n}
-                  <option value={n}>{n} 集</option>
-                {/each}
-              </select>
+              <input class="episode-count-input" type="number" min="3" max="24" bind:value={episodeCount} disabled={outlineLoading || projectSubmitting} />
               <button
                 class="btn btn-outline-generate"
                 disabled={outlineLoading || projectSubmitting || pointBalance < outlineCost}

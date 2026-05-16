@@ -553,7 +553,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   align-items: center;
   gap: 8px;
 }
-.episode-count-select {
+.episode-count-input {
+  width: 72px;
   height: 36px;
   padding: 0 10px;
   border-radius: var(--radius);
@@ -561,9 +562,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--surface);
   color: var(--text);
   font-size: 13px;
-  cursor: pointer;
+  text-align: center;
+  -moz-appearance: textfield;
 }
-.episode-count-select:focus {
+.episode-count-input::-webkit-inner-spin-button,
+.episode-count-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.episode-count-input:focus {
   border-color: var(--accent);
   outline: none;
 }
