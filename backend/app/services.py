@@ -125,6 +125,51 @@ def renumber(rows: list[dict]) -> None:
         item["no"] = index
 
 
+def add_ai_job(
+    data: dict,
+    user_id: str,
+    job_type: str,
+    provider: str,
+    cost: int,
+    status: str = "succeeded",
+    progress: int = 100,
+    provider_task_id: str | None = None,
+    error: str | None = None,
+    **links,
+) -> dict:
+    ts = now()
+    job = {
+        "id": uid("job"),
+        "user_id": user_id,
+        "type": job_type,
+        "provider": provider,
+        "provider_task_id": provider_task_id,
+        "status": status,
+        "progress": progress,
+        "cost_points": cost,
+        "input_json": {},
+        "output_json": {},
+        "error": error,
+        "created_at": ts,
+        "updated_at": ts,
+        "completed_at": ts if status in {"succeeded", "failed", "cancelled"} else "",
+        **{key: value for key, value in links.items() if value},
+    }
+    data.setdefault("ai_jobs", []).insert(0, job)
+    return job
+
+
+def refund_once(data: dict, user_id: str, task: dict, amount: int, scene: str, description: str) -> None:
+    output_json = task.get("output_json") if isinstance(task.get("output_json"), dict) else {}
+    if task.get("refunded") or output_json.get("refunded") or amount <= 0:
+        return
+    change_points(data, user_id, amount, "refund", scene, description)
+    task["refunded"] = True
+    if "output_json" in task:
+        output_json["refunded"] = True
+        task["output_json"] = output_json
+
+
 def build_project_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]:
     name = payload.name.strip()
     description = payload.description.strip()

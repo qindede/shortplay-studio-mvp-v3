@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import threading
@@ -9,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+import bcrypt
 
 from . import db_store
 
@@ -20,7 +21,7 @@ AUTH_SECRET = os.getenv("SHORTPLAY_AUTH_SECRET", "shortplay-mvp-secret")
 
 
 def default_password_hash(password: str) -> str:
-    return hashlib.sha256(f"{AUTH_SECRET}:{password}".encode("utf-8")).hexdigest()
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def default_users() -> list[dict[str, Any]]:

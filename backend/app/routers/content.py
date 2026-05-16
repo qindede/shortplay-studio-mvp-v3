@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import db_store, storage
+from .. import storage
 from ..ai import image as ai_image
 from ..ai import llm as ai_llm
 from ..ai import video as ai_video
@@ -33,71 +33,19 @@ from ..schemas import (
 )
 from ..security import get_current_user
 from ..services import (
-    change_points,
-    enrich_episode,
-    enrich_project,
+    add_ai_job,
     find_by_id,
-    get_user_projects,
-    get_user_usage,
     not_found,
-    renumber,
-    touch_episode_and_project,
-    touch_project,
-    usage_with_members,
-    verify_project_ownership,
+    refund_once,
 )
-from ..store import now, snapshot, uid, update
+from ..storage_adapter import Storage
+from ..store import now, uid
 
 router = APIRouter(prefix="/api", tags=["content"])
 
 
 def ai_error(exc: AIError) -> HTTPException:
     return HTTPException(status_code=503, detail=exc.public_message)
-
-
-def add_ai_job(
-    data: dict,
-    user_id: str,
-    job_type: str,
-    provider: str,
-    cost: int,
-    status: str = "succeeded",
-    progress: int = 100,
-    provider_task_id: str | None = None,
-    error: str | None = None,
-    **links,
-) -> dict:
-    ts = now()
-    job = {
-        "id": uid("job"),
-        "user_id": user_id,
-        "type": job_type,
-        "provider": provider,
-        "provider_task_id": provider_task_id,
-        "status": status,
-        "progress": progress,
-        "cost_points": cost,
-        "input_json": {},
-        "output_json": {},
-        "error": error,
-        "created_at": ts,
-        "updated_at": ts,
-        "completed_at": ts if status in {"succeeded", "failed", "cancelled"} else "",
-        **{key: value for key, value in links.items() if value},
-    }
-    data.setdefault("ai_jobs", []).insert(0, job)
-    return job
-
-
-def refund_once(data: dict, user_id: str, task: dict, amount: int, scene: str, description: str) -> None:
-    output_json = task.get("output_json") if isinstance(task.get("output_json"), dict) else {}
-    if task.get("refunded") or output_json.get("refunded") or amount <= 0:
-        return
-    change_points(data, user_id, amount, "refund", scene, description)
-    task["refunded"] = True
-    if "output_json" in task:
-        output_json["refunded"] = True
-        task["output_json"] = output_json
 
 
 def normalize_refs(refs: list[dict] | None) -> list[dict]:
@@ -216,82 +164,12 @@ def create_generated_asset_payload(project_id: str, payload: dict, generated_url
 
 @router.get("/dashboard")
 def dashboard(user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        return db_store.dashboard(user)
-
-    data = snapshot()
-    user_projects = get_user_projects(data, user["id"])
-    project_ids = {p["id"] for p in user_projects}
-    return {
-        "project_count": len(user_projects),
-        "episode_count": len([e for e in data["episodes"] if e["project_id"] in project_ids]),
-        "version_count": len([v for v in data["video_versions"] if v["project_id"] in project_ids]),
-        "asset_count": len([a for a in data["assets"] if a["project_id"] in project_ids]),
-        "usage": usage_with_members(data, user["id"]),
-        "current_user": user,
-    }
+    return Storage.dashboard(user)
 
 
 @router.get("/workspace/bootstrap")
 def workspace_bootstrap(user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        return db_store.workspace_bootstrap(user)
-
-    data = snapshot()
-    user_projects = get_user_projects(data, user["id"])
-    project_ids = {p["id"] for p in user_projects}
-    dashboard_data = {
-        "project_count": len(user_projects),
-        "episode_count": len([e for e in data["episodes"] if e["project_id"] in project_ids]),
-        "version_count": len([v for v in data["video_versions"] if v["project_id"] in project_ids]),
-        "asset_count": len([a for a in data["assets"] if a["project_id"] in project_ids]),
-        "usage": usage_with_members(data, user["id"]),
-        "current_user": user,
-    }
-    ledger_rows = [e for e in data.get("point_ledger", []) if e["user_id"] == user["id"]]
-    projects = [enrich_project(data, p) for p in user_projects]
-
-    current_project = projects[0] if projects else None
-    project_episodes: list[dict] = []
-    project_assets: list[dict] = []
-    selected_episode = None
-    episode_shots: list[dict] = []
-    episode_tasks: list[dict] = []
-    project_versions: list[dict] = []
-
-    if current_project:
-        project_episodes = [e for e in data["episodes"] if e["project_id"] == current_project["id"]]
-        project_episodes.sort(key=lambda x: x["no"])
-        project_episodes = [enrich_episode(data, e) for e in project_episodes]
-        project_assets = [a for a in data["assets"] if a["project_id"] == current_project["id"]]
-
-        if project_episodes:
-            selected_episode = project_episodes[0]
-            episode_shots = [s for s in data["shots"] if s["episode_id"] == selected_episode["id"]]
-            episode_shots.sort(key=lambda x: x["no"])
-            episode_tasks = [t for t in data["video_tasks"] if t["episode_id"] == selected_episode["id"]]
-            episode_tasks.sort(key=lambda x: x["updated_at"], reverse=True)
-            project_versions = [
-                v
-                for v in data["video_versions"]
-                if v["project_id"] == current_project["id"] and v["episode_id"] == selected_episode["id"]
-            ]
-        else:
-            project_versions = [v for v in data["video_versions"] if v["project_id"] == current_project["id"]]
-        project_versions.sort(key=lambda x: x["created_at"], reverse=True)
-
-    return {
-        "dashboard": dashboard_data,
-        "point_ledger": {"items": ledger_rows[:10], "total": len(ledger_rows)},
-        "projects": projects,
-        "current_project": current_project,
-        "episodes": project_episodes,
-        "selected_episode": selected_episode,
-        "shots": episode_shots,
-        "assets": project_assets,
-        "video_tasks": episode_tasks,
-        "versions": project_versions,
-    }
+    return Storage.workspace_bootstrap(user)
 
 
 @router.post("/optimize-prompt")
@@ -304,47 +182,12 @@ def optimize_prompt_endpoint(payload: PromptOptimizeRequest, user: dict = Depend
 
 @router.get("/projects")
 def list_projects(user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        return db_store.list_projects(user)
-
-    data = snapshot()
-    return [enrich_project(data, p) for p in get_user_projects(data, user["id"])]
+    return Storage.list_projects(user)
 
 
 @router.post("/projects")
 def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        return db_store.create_project(user, payload, now())
-
-    def mutate(data):
-        ts = now()
-        project = {
-            "id": uid("proj"),
-            "name": payload.name.strip(),
-            "short_name": payload.name.strip()[:8],
-            "description": payload.description,
-            "status": "draft",
-            "owner": payload.owner if payload.owner and payload.owner != "未分配" else user["display_name"],
-            "owner_user_id": user["id"],
-            "cover": "dark",
-            "updated_at": ts,
-        }
-        data["projects"].insert(0, project)
-        for index, item in enumerate(payload.episodes, start=1):
-            data["episodes"].append({
-                "id": uid("ep"),
-                "project_id": project["id"],
-                "no": index,
-                "title": item.title,
-                "summary": item.summary,
-                "script": item.script or item.summary,
-                "duration_target": item.duration_target,
-                "status": "draft",
-                "updated_at": ts,
-            })
-        return enrich_project(data, project)
-
-    return update(mutate)
+    return Storage.create_project(user, payload)
 
 
 @router.post("/projects/generate-outline", response_model=OutlineGenerateResponse)
@@ -353,319 +196,86 @@ def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depen
         episodes = ai_llm.generate_outline(payload)
     except AIError as exc:
         raise ai_error(exc) from exc
-
-    if db_store.enabled():
-        cost = POINT_RULES["outline"]
-        result = db_store.consume_with_job(user["id"], cost, "生成短剧大纲", f"智能生成《{payload.name}》短剧大纲", "outline", "minimax", now())
-        if result.get("error") == "insufficient_points":
-            raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
-        return {"cost": cost, "episodes": episodes}
-
-    def mutate(data):
-        cost = POINT_RULES["outline"]
-        change_points(data, user["id"], -cost, "consume", "生成短剧大纲", f"智能生成《{payload.name}》短剧大纲")
-        add_ai_job(data, user["id"], "outline", "minimax", cost)
-        return {"cost": cost, "episodes": episodes}
-
-    return update(mutate)
+    return Storage.generate_project_outline(user, episodes, POINT_RULES["outline"], payload.name)
 
 
 @router.get("/projects/{project_id}")
 def get_project(project_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        project = db_store.get_project(user, project_id)
-        if not project:
-            not_found("project")
-        return project
-
-    data = snapshot()
-    return enrich_project(data, verify_project_ownership(data, project_id, user["id"]))
+    return Storage.get_project(user, project_id)
 
 
 @router.put("/projects/{project_id}")
 def update_project(project_id: str, payload: ProjectUpdate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        project = db_store.update_project(user, project_id, payload, now())
-        if not project:
-            not_found("project")
-        return project
-
-    def mutate(data):
-        project = verify_project_ownership(data, project_id, user["id"])
-        updates = payload.model_dump(exclude_none=True)
-        if "name" in updates:
-            project["name"] = updates["name"].strip()
-            project["short_name"] = project["name"][:8]
-        if "description" in updates:
-            project["description"] = updates["description"]
-        if "status" in updates:
-            project["status"] = updates["status"]
-        touch_project(data, project_id)
-        return enrich_project(data, project)
-
-    return update(mutate)
+    return Storage.update_project(user, project_id, payload)
 
 
 @router.delete("/projects/{project_id}")
 def delete_project(project_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        if not db_store.delete_project(user, project_id):
-            not_found("project")
-        return {"ok": True}
-
-    def mutate(data):
-        verify_project_ownership(data, project_id, user["id"])
-        episode_ids = {e["id"] for e in data["episodes"] if e["project_id"] == project_id}
-        shot_ids = {s["id"] for s in data["shots"] if s["episode_id"] in episode_ids}
-        data["projects"] = [p for p in data["projects"] if p["id"] != project_id]
-        data["episodes"] = [e for e in data["episodes"] if e["project_id"] != project_id]
-        data["shots"] = [s for s in data["shots"] if s["episode_id"] not in episode_ids]
-        data["assets"] = [a for a in data["assets"] if a["project_id"] != project_id]
-        data["video_tasks"] = [t for t in data["video_tasks"] if t.get("episode_id") not in episode_ids and t.get("shot_id") not in shot_ids]
-        data["video_versions"] = [v for v in data["video_versions"] if v["project_id"] != project_id]
-        return {"ok": True}
-
-    return update(mutate)
+    return Storage.delete_project(user, project_id)
 
 
 @router.get("/projects/{project_id}/episodes")
 def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        episodes = db_store.list_episodes(user, project_id)
-        if episodes is None:
-            not_found("project")
-        return episodes
-
-    data = snapshot()
-    verify_project_ownership(data, project_id, user["id"])
-    episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
-    episodes.sort(key=lambda x: x["no"])
-    return [enrich_episode(data, e) for e in episodes]
+    return Storage.list_episodes(user, project_id)
 
 
 @router.post("/projects/{project_id}/episodes")
 def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        episode = db_store.create_episode(user, project_id, payload, now())
-        if not episode:
-            not_found("project")
-        return episode
-
-    def mutate(data):
-        verify_project_ownership(data, project_id, user["id"])
-        project_episodes = [e for e in data["episodes"] if e["project_id"] == project_id]
-        ts = now()
-        episode = {
-            "id": uid("ep"),
-            "project_id": project_id,
-            "no": max([e["no"] for e in project_episodes] or [0]) + 1,
-            "title": payload.title,
-            "summary": payload.summary,
-            "script": payload.script or payload.summary,
-            "duration_target": payload.duration_target,
-            "status": "draft",
-            "updated_at": ts,
-        }
-        data["episodes"].append(episode)
-        touch_project(data, project_id, ts)
-        return enrich_episode(data, episode)
-
-    return update(mutate)
+    return Storage.create_episode(user, project_id, payload)
 
 
 @router.get("/episodes/{episode_id}")
 def get_episode(episode_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        episode = db_store.get_episode(user, episode_id)
-        if not episode:
-            not_found("episode")
-        return episode
-
-    data = snapshot()
-    episode = find_by_id(data["episodes"], episode_id, "episode")
-    verify_project_ownership(data, episode["project_id"], user["id"])
-    return enrich_episode(data, episode)
+    return Storage.get_episode(user, episode_id)
 
 
 @router.get("/episodes/{episode_id}/workspace")
 def get_episode_workspace(episode_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        payload = db_store.episode_workspace(user, episode_id)
-        if payload is None:
-            not_found("episode")
-        return payload
-
-    data = snapshot()
-    episode = find_by_id(data["episodes"], episode_id, "episode")
-    verify_project_ownership(data, episode["project_id"], user["id"])
-    shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
-    shots.sort(key=lambda x: x["no"])
-    tasks = [t for t in data["video_tasks"] if t["episode_id"] == episode_id]
-    tasks.sort(key=lambda x: x["updated_at"], reverse=True)
-    versions = [v for v in data["video_versions"] if v["project_id"] == episode["project_id"] and v["episode_id"] == episode_id]
-    versions.sort(key=lambda x: x["created_at"], reverse=True)
-    return {"shots": shots, "video_tasks": tasks, "versions": versions}
+    return Storage.episode_workspace(user, episode_id)
 
 
 @router.put("/episodes/{episode_id}")
 def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        episode = db_store.update_episode(user, episode_id, payload, now())
-        if not episode:
-            not_found("episode")
-        return episode
-
-    def mutate(data):
-        episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, episode["project_id"], user["id"])
-        episode.update(payload.model_dump(exclude_none=True))
-        touch_episode_and_project(data, episode)
-        return enrich_episode(data, episode)
-
-    return update(mutate)
+    return Storage.update_episode(user, episode_id, payload)
 
 
 @router.delete("/episodes/{episode_id}")
 def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        ok, _project_id = db_store.delete_episode(user, episode_id, now())
-        if not ok:
-            not_found("episode")
-        return {"ok": True}
-
-    def mutate(data):
-        episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, episode["project_id"], user["id"])
-        project_id = episode["project_id"]
-        data["episodes"] = [e for e in data["episodes"] if e["id"] != episode_id]
-        data["shots"] = [s for s in data["shots"] if s["episode_id"] != episode_id]
-        data["video_tasks"] = [t for t in data["video_tasks"] if t["episode_id"] != episode_id]
-        data["video_versions"] = [v for v in data["video_versions"] if v["episode_id"] != episode_id]
-        renumber([e for e in data["episodes"] if e["project_id"] == project_id])
-        touch_project(data, project_id)
-        return {"ok": True}
-
-    return update(mutate)
+    return Storage.delete_episode(user, episode_id)
 
 
 @router.get("/episodes/{episode_id}/shots")
 def list_shots(episode_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        shots = db_store.list_shots(user, episode_id)
-        if shots is None:
-            not_found("episode")
-        return shots
-
-    data = snapshot()
-    episode = find_by_id(data["episodes"], episode_id, "episode")
-    verify_project_ownership(data, episode["project_id"], user["id"])
-    shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
-    shots.sort(key=lambda x: x["no"])
-    return shots
+    return Storage.list_shots(user, episode_id)
 
 
 @router.post("/episodes/{episode_id}/shots")
 def create_shot(episode_id: str, payload: ShotCreate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        shot = db_store.create_shot(user, episode_id, payload, uid("shot"), now())
-        if shot is None:
-            not_found("episode")
-        return shot
-
-    def mutate(data):
-        episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, episode["project_id"], user["id"])
-        episode_shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
-        ts = now()
-        shot = {
-            "id": uid("shot"),
-            "episode_id": episode_id,
-            "no": max([s["no"] for s in episode_shots], default=0) + 1,
-            "title": payload.title,
-            "visual": payload.visual,
-            "dialogue": payload.dialogue,
-            "characters": payload.characters,
-            "scene": payload.scene,
-            "duration": payload.duration,
-            "status": "pending",
-            "updated_at": ts,
-        }
-        data["shots"].append(shot)
-        episode["status"] = "storyboard_ready"
-        touch_episode_and_project(data, episode, ts)
-        return shot
-
-    return update(mutate)
+    return Storage.create_shot(user, episode_id, payload)
 
 
 @router.post("/episodes/{episode_id}/prepare-storyboard", response_model=StoryboardPrepareResponse)
 def prepare_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        context = db_store.episode_generation_context(user, episode_id)
-        if not context:
-            not_found("episode")
-        try:
-            ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], context["assets"])
-        except AIError as exc:
-            raise ai_error(exc) from exc
-        return {
-            "cost": POINT_RULES["storyboard"],
-            "asset_cost": POINT_RULES["image_asset"],
-            "missing_assets": storyboard_missing_assets(ai_shots, context["assets"]),
-        }
-
-    current = snapshot()
-    episode = find_by_id(current["episodes"], episode_id, "episode")
-    project = verify_project_ownership(current, episode["project_id"], user["id"])
-    assets = [a for a in current["assets"] if a["project_id"] == project["id"]]
+    context = Storage.episode_generation_context(user, episode_id)
+    if not context:
+        not_found("episode")
     try:
-        ai_shots = ai_llm.generate_storyboard(project, episode, assets)
+        ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], context["assets"])
     except AIError as exc:
         raise ai_error(exc) from exc
     return {
         "cost": POINT_RULES["storyboard"],
         "asset_cost": POINT_RULES["image_asset"],
-        "missing_assets": storyboard_missing_assets(ai_shots, assets),
+        "missing_assets": storyboard_missing_assets(ai_shots, context["assets"]),
     }
 
 
 @router.post("/episodes/{episode_id}/generate-storyboard")
 def generate_storyboard(episode_id: str, payload: StoryboardGenerateRequest | None = None, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        context = db_store.episode_generation_context(user, episode_id)
-        if not context:
-            not_found("episode")
-        existing_assets = context["assets"]
-        confirmed_assets = [item.model_dump() for item in (payload.confirmed_assets if payload else [])]
-        existing_names = {
-            item
-            for asset in existing_assets
-            for item in comparable_asset_names(asset)
-            if asset.get("type") in {"character", "scene"}
-        }
-        assets_to_generate = [item for item in confirmed_assets if item["name"].strip() not in existing_names]
-        generated_assets: list[dict] = []
-        for item in assets_to_generate:
-            try:
-                generated_url = ai_image.generate_image(item["prompt"])
-            except AIError as exc:
-                raise ai_error(exc) from exc
-            generated_assets.append(create_generated_asset_payload(context["project"]["id"], item, generated_url))
-        try:
-            ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], existing_assets + generated_assets)
-        except AIError as exc:
-            raise ai_error(exc) from exc
-        result = db_store.save_storyboard(user, episode_id, ai_shots, generated_assets, POINT_RULES["storyboard"], POINT_RULES["image_asset"], now())
-        if result is None:
-            not_found("episode")
-        if isinstance(result, dict) and result.get("error") == "insufficient_points":
-            raise HTTPException(status_code=402, detail="积分不足")
-        return result
-
-    current = snapshot()
-    episode = find_by_id(current["episodes"], episode_id, "episode")
-    project = verify_project_ownership(current, episode["project_id"], user["id"])
-    existing_assets = [a for a in current["assets"] if a["project_id"] == project["id"]]
+    context = Storage.episode_generation_context(user, episode_id)
+    if not context:
+        not_found("episode")
+    existing_assets = context["assets"]
     confirmed_assets = [item.model_dump() for item in (payload.confirmed_assets if payload else [])]
     existing_names = {
         item
@@ -680,381 +290,68 @@ def generate_storyboard(episode_id: str, payload: StoryboardGenerateRequest | No
             generated_url = ai_image.generate_image(item["prompt"])
         except AIError as exc:
             raise ai_error(exc) from exc
-        generated_assets.append(create_generated_asset_payload(project["id"], item, generated_url))
-
-    storyboard_assets = existing_assets + generated_assets
+        generated_assets.append(create_generated_asset_payload(context["project"]["id"], item, generated_url))
     try:
-        ai_shots = ai_llm.generate_storyboard(project, episode, storyboard_assets)
+        ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], existing_assets + generated_assets)
     except AIError as exc:
         raise ai_error(exc) from exc
-
-    def mutate(data):
-        target = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, target["project_id"], user["id"])
-        for asset in generated_assets:
-            duplicate = any(
-                existing.get("project_id") == target["project_id"]
-                and existing.get("type") == asset["type"]
-                and asset["name"] in comparable_asset_names(existing)
-                for existing in data["assets"]
-            )
-            if duplicate:
-                continue
-            asset_cost = POINT_RULES["image_asset"]
-            change_points(data, user["id"], -asset_cost, "consume", "AI 生成素材", f"AI 生成素材《{asset['name']}》")
-            add_ai_job(data, user["id"], "image_asset", "seedream", asset_cost, project_id=target["project_id"], asset_id=asset["id"])
-            data["assets"].insert(0, asset)
-            usage = get_user_usage(data, user["id"])
-            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
-
-        cost = POINT_RULES["storyboard"]
-        change_points(data, user["id"], -cost, "consume", "生成分镜", f"生成/更新《{target['title']}》分镜")
-        add_ai_job(data, user["id"], "storyboard", "minimax", cost, episode_id=episode_id, project_id=target["project_id"])
-        data["shots"] = [s for s in data["shots"] if s["episode_id"] != episode_id]
-        new_shots = []
-        for index, item in enumerate(ai_shots, start=1):
-            new_shots.append({
-                "id": uid("shot"),
-                "episode_id": episode_id,
-                "no": index,
-                "title": item["title"],
-                "visual": item.get("visual", ""),
-                "dialogue": item.get("dialogue", ""),
-                "characters": item.get("characters", []),
-                "scene": item.get("scene", ""),
-                "duration": item.get("duration", 3),
-                "status": "pending",
-                "updated_at": now(),
-            })
-        data["shots"].extend(new_shots)
-        target["status"] = "storyboard_ready"
-        touch_episode_and_project(data, target)
-        return new_shots
-
-    return update(mutate)
+    return Storage.save_storyboard(user, episode_id, ai_shots, generated_assets, POINT_RULES["storyboard"], POINT_RULES["image_asset"])
 
 
 @router.patch("/shots/{shot_id}")
 def patch_shot(shot_id: str, payload: ShotUpdate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        shot = db_store.patch_shot(user, shot_id, payload, now())
-        if not shot:
-            not_found("shot")
-        return shot
-
-    def mutate(data):
-        shot = find_by_id(data["shots"], shot_id, "shot")
-        episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
-        if episode:
-            verify_project_ownership(data, episode["project_id"], user["id"])
-        updates = payload.model_dump(exclude_none=True)
-        shot.update(updates)
-        shot["updated_at"] = now()
-        task = next((t for t in data["video_tasks"] if t["shot_id"] == shot_id), None)
-        if task:
-            if "title" in updates:
-                task["title"] = shot["title"]
-            if "duration" in updates:
-                task["duration"] = shot["duration"]
-            task["updated_at"] = now()
-        if episode:
-            touch_episode_and_project(data, episode)
-        return shot
-
-    return update(mutate)
+    return Storage.patch_shot(user, shot_id, payload)
 
 
 @router.delete("/shots/{shot_id}")
 def delete_shot(shot_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        if not db_store.delete_shot(user, shot_id, now()):
-            not_found("shot")
-        return {"ok": True}
-
-    def mutate(data):
-        shot = find_by_id(data["shots"], shot_id, "shot")
-        episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
-        if episode:
-            verify_project_ownership(data, episode["project_id"], user["id"])
-        data["shots"] = [s for s in data["shots"] if s["id"] != shot_id]
-        data["video_tasks"] = [t for t in data["video_tasks"] if t["shot_id"] != shot_id]
-        renumber([s for s in data["shots"] if s["episode_id"] == shot["episode_id"]])
-        if episode:
-            touch_episode_and_project(data, episode)
-        return {"ok": True}
-
-    return update(mutate)
+    return Storage.delete_shot(user, shot_id)
 
 
 @router.get("/episodes/{episode_id}/video-tasks")
 def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        payload = db_store.episode_workspace(user, episode_id)
-        if payload is None:
-            not_found("episode")
-        return payload["video_tasks"]
-
-    def mutate(data):
-        episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, episode["project_id"], user["id"])
-        tasks = [t for t in data["video_tasks"] if t["episode_id"] == episode_id]
-        for task in tasks:
-            if task.get("status") != "generating" or not task.get("provider_task_id"):
-                continue
-            try:
-                remote = ai_video.query_video_task(task["provider_task_id"])
-            except AIError:
-                continue
-            task.update({key: value for key, value in remote.items() if value is not None})
-            task["updated_at"] = now()
-            job = next((item for item in data.get("ai_jobs", []) if item.get("id") == task.get("ai_job_id")), None)
-            if job:
-                job["progress"] = task.get("progress", job.get("progress", 0))
-                job["updated_at"] = task["updated_at"]
-                if task.get("status") == "completed":
-                    job["status"] = "succeeded"
-                    job["completed_at"] = task["updated_at"]
-                    job["output_json"] = {"video_url": task.get("video_url")}
-                elif task.get("status") == "failed":
-                    job["status"] = "failed"
-                    job["error"] = task.get("error")
-                    job["completed_at"] = task["updated_at"]
-            shot = next((s for s in data["shots"] if s["id"] == task["shot_id"]), None)
-            if shot and task.get("status") in {"completed", "failed"}:
-                shot["status"] = task["status"]
-                shot["updated_at"] = task["updated_at"]
-            if task.get("status") == "failed":
-                refund_target = job or task
-                refund_once(data, user["id"], refund_target, task["duration"] * POINT_RULES["video_second"], "视频生成失败退款", task.get("error") or "视频任务失败")
-        tasks.sort(key=lambda x: x["updated_at"], reverse=True)
-        return tasks
-
-    return update(mutate)
+    return Storage.list_video_tasks_with_poll(user, episode_id)
 
 
 @router.post("/shots/{shot_id}/generate-video")
 def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        context = db_store.shot_generation_context(user, shot_id)
-        if not context:
-            not_found("shot")
-        data = {
-            "episodes": [context["episode"]] if context.get("episode") else [],
-            "assets": context.get("assets", []),
-        }
-        try:
-            provider_task_id = ai_video.create_video_task(context["shot"].get("visual") or context["shot"]["title"], find_reference_image(data, context["shot"]), context["shot"]["duration"])
-        except AIError as exc:
-            raise ai_error(exc) from exc
-        task = db_store.create_video_task(user, shot_id, provider_task_id, POINT_RULES["video_second"], now())
-        if task is None:
-            not_found("shot")
-        if task.get("error") == "insufficient_points":
-            raise HTTPException(status_code=402, detail="积分不足")
-        return task
-
-    current = snapshot()
-    shot = find_by_id(current["shots"], shot_id, "shot")
-    episode = next((e for e in current["episodes"] if e["id"] == shot["episode_id"]), None)
-    if episode:
-        verify_project_ownership(current, episode["project_id"], user["id"])
-    image_url = find_reference_image(current, shot)
+    shot, episode, assets = Storage.get_shot_with_context(user, shot_id)
+    data = {"episodes": [episode] if episode else [], "assets": assets}
     try:
-        provider_task_id = ai_video.create_video_task(shot.get("visual") or shot["title"], image_url, shot["duration"])
+        provider_task_id = ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(data, shot), shot["duration"])
     except AIError as exc:
         raise ai_error(exc) from exc
-
-    def mutate(data):
-        target = find_by_id(data["shots"], shot_id, "shot")
-        episode_for_shot = next((e for e in data["episodes"] if e["id"] == target["episode_id"]), None)
-        if episode_for_shot:
-            verify_project_ownership(data, episode_for_shot["project_id"], user["id"])
-        duration = max(1, int(target["duration"]))
-        change_points(data, user["id"], -(duration * POINT_RULES["video_second"]), "consume", "生成镜头视频", f"生成镜头 #{target['no']}《{target['title']}》，{duration}s")
-        job = add_ai_job(
-            data,
-            user["id"],
-            "video_shot",
-            "seedance",
-            duration * POINT_RULES["video_second"],
-            status="running",
-            progress=0,
-            provider_task_id=provider_task_id,
-            episode_id=target["episode_id"],
-            shot_id=target["id"],
-        )
-        task = next((t for t in data["video_tasks"] if t["shot_id"] == target["id"]), None)
-        if not task:
-            task = {"id": uid("task"), "episode_id": target["episode_id"], "shot_id": target["id"]}
-            data["video_tasks"].append(task)
-        task.update({
-            "title": target["title"],
-            "duration": duration,
-            "progress": 0,
-            "status": "generating",
-            "provider": "seedance",
-            "provider_task_id": provider_task_id,
-            "ai_job_id": job["id"],
-            "error": None,
-            "updated_at": now(),
-        })
-        target["status"] = "generating"
-        target["updated_at"] = now()
-        if episode_for_shot:
-            touch_episode_and_project(data, episode_for_shot)
-        return task
-
-    return update(mutate)
+    return Storage.create_video_task(user, shot_id, provider_task_id, POINT_RULES["video_second"])
 
 
 @router.post("/episodes/{episode_id}/generate-videos")
 def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        context = db_store.episode_generation_context(user, episode_id)
-        if not context:
-            not_found("episode")
-        shots = context.get("shots", [])
-        if not shots:
-            not_found("shots")
-        data = {
-            "episodes": [context["episode"]],
-            "assets": context.get("assets", []),
-        }
-        try:
-            provider_tasks = {
-                shot["id"]: ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(data, shot), shot["duration"])
-                for shot in shots
-            }
-        except AIError as exc:
-            raise ai_error(exc) from exc
-        tasks = []
-        for shot in shots:
-            task = db_store.create_video_task(user, shot["id"], provider_tasks[shot["id"]], POINT_RULES["video_second"], now())
-            if isinstance(task, dict) and task.get("error") == "insufficient_points":
-                raise HTTPException(status_code=402, detail="积分不足")
-            if task:
-                tasks.append(task)
-        return tasks
-
-    current = snapshot()
-    episode = find_by_id(current["episodes"], episode_id, "episode")
-    verify_project_ownership(current, episode["project_id"], user["id"])
-    shots = [s for s in current["shots"] if s["episode_id"] == episode_id]
+    context = Storage.episode_generation_context(user, episode_id)
+    if not context:
+        not_found("episode")
+    shots = context.get("shots", [])
     if not shots:
         not_found("shots")
+    data = {"episodes": [context["episode"]], "assets": context.get("assets", [])}
     try:
         provider_tasks = {
-            shot["id"]: ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(current, shot), shot["duration"])
+            shot["id"]: ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(data, shot), shot["duration"])
             for shot in shots
         }
     except AIError as exc:
         raise ai_error(exc) from exc
-
-    def mutate(data):
-        target_episode = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, target_episode["project_id"], user["id"])
-        target_shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
-        total_duration = sum(max(1, int(s["duration"])) for s in target_shots)
-        change_points(data, user["id"], -(total_duration * POINT_RULES["video_second"]), "consume", "批量生成视频", f"批量生成《{target_episode['title']}》{len(target_shots)} 个镜头，{total_duration}s")
-        tasks = []
-        for target in target_shots:
-            duration = max(1, int(target["duration"]))
-            job = add_ai_job(
-                data,
-                user["id"],
-                "video_shot",
-                "seedance",
-                duration * POINT_RULES["video_second"],
-                status="running",
-                progress=0,
-                provider_task_id=provider_tasks[target["id"]],
-                episode_id=episode_id,
-                shot_id=target["id"],
-                project_id=target_episode["project_id"],
-            )
-            task = next((t for t in data["video_tasks"] if t["shot_id"] == target["id"]), None)
-            if not task:
-                task = {"id": uid("task"), "episode_id": target["episode_id"], "shot_id": target["id"]}
-                data["video_tasks"].append(task)
-            task.update({
-                "title": target["title"],
-                "duration": max(1, int(target["duration"])),
-                "progress": 0,
-                "status": "generating",
-                "provider": "seedance",
-                "provider_task_id": provider_tasks[target["id"]],
-                "ai_job_id": job["id"],
-                "error": None,
-                "updated_at": now(),
-            })
-            target["status"] = "generating"
-            target["updated_at"] = now()
-            tasks.append(task)
-        target_episode["status"] = "generating"
-        touch_episode_and_project(data, target_episode)
-        return tasks
-
-    return update(mutate)
+    return Storage.batch_create_video_tasks(user, episode_id, provider_tasks, POINT_RULES["video_second"])
 
 
 @router.get("/projects/{project_id}/assets")
 def list_assets(project_id: str, type: str | None = None, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        assets = db_store.list_assets(user, project_id, type)
-        if assets is None:
-            not_found("project")
-        return assets
-
-    data = snapshot()
-    verify_project_ownership(data, project_id, user["id"])
-    assets = [a for a in data["assets"] if a["project_id"] == project_id]
-    if type:
-        assets = [a for a in assets if a["type"] == type]
-    return assets
+    return Storage.list_assets(user, project_id, type)
 
 
 @router.post("/projects/{project_id}/assets")
 def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        visual_asset = payload.type in {"character", "scene", "image"}
-        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-        asset = db_store.create_asset(user, project_id, payload, normalize_refs(payload.references), cost, now())
-        if asset is None:
-            not_found("project")
-        if asset.get("error") == "points":
-            raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
-        return asset
-
-    def mutate(data):
-        verify_project_ownership(data, project_id, user["id"])
-        visual_asset = payload.type in {"character", "scene", "image"}
-        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-        change_points(data, user["id"], -cost, "consume", "创建素材", f"创建素材《{payload.name}》")
-        ts = now()
-        refs = normalize_refs(payload.references)
-        asset = {
-            "id": uid("asset"),
-            "project_id": project_id,
-            "type": payload.type,
-            "name": payload.name,
-            "description": payload.description,
-            "ref_count": len(refs),
-            "initial": payload.initial[:1] or payload.name[:1],
-            "image": payload.image,
-            "voice": payload.voice,
-            "voice_url": payload.voice_url,
-            "voice_status": "uploaded" if payload.voice_url else None,
-            "references": refs,
-            "updated_at": ts,
-        }
-        data["assets"].insert(0, asset)
-        if visual_asset:
-            usage = get_user_usage(data, user["id"])
-            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
-        touch_project(data, project_id, ts)
-        return asset
-
-    return update(mutate)
+    refs = normalize_refs(payload.references)
+    return Storage.create_asset(user, project_id, payload, refs)
 
 
 @router.post("/projects/{project_id}/assets/generate")
@@ -1067,126 +364,31 @@ def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends
             raise ai_error(exc) from exc
     else:
         generated_url = None
-
-    if db_store.enabled():
-        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-        refs = [{
-            "id": uid("ref"),
-            "type": "image" if visual_asset else "audio",
-            "name": f"AI 生成 - {payload.name}",
-            "url": generated_url,
-            "note": payload.prompt,
-        }]
-        asset = db_store.generate_asset(user, project_id, payload, generated_url, refs, cost, "seedream" if visual_asset else "manual", now())
-        if asset is None:
-            not_found("project")
-        if asset.get("error") == "insufficient_points":
-            raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
-        return asset
-
-    def mutate(data):
-        verify_project_ownership(data, project_id, user["id"])
-        cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-        change_points(data, user["id"], -cost, "consume", "AI 生成素材", f"AI 生成素材《{payload.name}》")
-        add_ai_job(data, user["id"], "image_asset" if visual_asset else "audio_asset", "seedream" if visual_asset else "manual", cost, project_id=project_id)
-        ts = now()
-        refs = [{
-            "id": uid("ref"),
-            "type": "image" if visual_asset else "audio",
-            "name": f"AI 生成 - {payload.name}",
-            "url": generated_url,
-            "note": payload.prompt,
-        }]
-        asset = {
-            "id": uid("asset"),
-            "project_id": project_id,
-            "type": payload.type,
-            "name": payload.name,
-            "description": payload.description,
-            "ref_count": len(refs),
-            "initial": payload.name[:1],
-            "image": generated_url,
-            "voice": None,
-            "voice_url": None,
-            "references": refs,
-            "updated_at": ts,
-        }
-        data["assets"].insert(0, asset)
-        if visual_asset:
-            usage = get_user_usage(data, user["id"])
-            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
-        touch_project(data, project_id, ts)
-        return asset
-
-    return update(mutate)
+    refs = [{
+        "id": uid("ref"),
+        "type": "image" if visual_asset else "audio",
+        "name": f"AI 生成 - {payload.name}",
+        "url": generated_url,
+        "note": payload.prompt,
+    }]
+    return Storage.generate_asset(user, project_id, payload, generated_url, refs, visual_asset)
 
 
 @router.put("/assets/{asset_id}")
 def update_asset(asset_id: str, payload: AssetUpdate, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        update_data = payload.model_dump(exclude_unset=True)
-        refs = normalize_refs(update_data["references"]) if "references" in update_data and update_data["references"] is not None else None
-        asset = db_store.update_asset(user, asset_id, payload, refs, now())
-        if not asset:
-            not_found("asset")
-        return asset
-
-    def mutate(data):
-        asset = find_by_id(data["assets"], asset_id, "asset")
-        verify_project_ownership(data, asset["project_id"], user["id"])
-        update_data = payload.model_dump(exclude_unset=True)
-        if "references" in update_data and update_data["references"] is not None:
-            update_data["references"] = normalize_refs(update_data["references"])
-            update_data["ref_count"] = len(update_data["references"])
-        asset.update(update_data)
-        asset["updated_at"] = now()
-        touch_project(data, asset["project_id"], asset["updated_at"])
-        return asset
-
-    return update(mutate)
+    return Storage.update_asset(user, asset_id, payload)
 
 
 @router.delete("/assets/{asset_id}")
 def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        if not db_store.delete_asset(user, asset_id):
-            not_found("asset")
-        return {"ok": True}
-
-    def mutate(data):
-        asset = find_by_id(data["assets"], asset_id, "asset")
-        verify_project_ownership(data, asset["project_id"], user["id"])
-        data["assets"] = [a for a in data["assets"] if a["id"] != asset_id]
-        return {"ok": True}
-
-    return update(mutate)
+    return Storage.delete_asset(user, asset_id)
 
 
 @router.post("/assets/{asset_id}/voice-clone")
 def start_voice_clone(asset_id: str, payload: VoiceCloneRequest, user: dict = Depends(get_current_user)):
     if not payload.consent:
         raise HTTPException(status_code=400, detail="请确认已获得声音授权")
-    if db_store.enabled():
-        asset = db_store.get_asset(user, asset_id)
-        if not asset:
-            not_found("asset")
-        voice_url = payload.voice_url or asset.get("voice_url")
-        if not voice_url or not voice_url.startswith("/uploads/"):
-            raise HTTPException(status_code=400, detail="请先上传角色声音样本")
-        try:
-            audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
-            speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
-            result = ai_voice.clone_voice(speaker_id, audio, Path(voice_url).suffix.lstrip(".") or "wav")
-        except (AIError, storage.StorageError) as exc:
-            raise HTTPException(status_code=503, detail=getattr(exc, "public_message", str(exc))) from exc
-        updated = db_store.update_voice_clone(user, asset_id, result, POINT_RULES["voice_clone"], now(), consume=True)
-        if isinstance(updated, dict) and updated.get("error") == "insufficient_points":
-            raise HTTPException(status_code=402, detail="积分不足")
-        return updated
-
-    current = snapshot()
-    asset = find_by_id(current["assets"], asset_id, "asset")
-    verify_project_ownership(current, asset["project_id"], user["id"])
+    asset = Storage.get_asset(user, asset_id)
     voice_url = payload.voice_url or asset.get("voice_url")
     if not voice_url or not voice_url.startswith("/uploads/"):
         raise HTTPException(status_code=400, detail="请先上传角色声音样本")
@@ -1196,118 +398,29 @@ def start_voice_clone(asset_id: str, payload: VoiceCloneRequest, user: dict = De
         result = ai_voice.clone_voice(speaker_id, audio, Path(voice_url).suffix.lstrip(".") or "wav")
     except (AIError, storage.StorageError) as exc:
         raise HTTPException(status_code=503, detail=getattr(exc, "public_message", str(exc))) from exc
-
-    def mutate(data):
-        target = find_by_id(data["assets"], asset_id, "asset")
-        verify_project_ownership(data, target["project_id"], user["id"])
-        cost = POINT_RULES["voice_clone"]
-        change_points(data, user["id"], -cost, "consume", "音色克隆", f"训练《{target['name']}》角色音色")
-        target.update({k: v for k, v in result.items() if v is not None})
-        target["updated_at"] = now()
-        job = add_ai_job(
-            data,
-            user["id"],
-            "voice_clone",
-            "volc_voice",
-            cost,
-            status="succeeded" if target.get("voice_status") == "completed" else "running",
-            progress=100 if target.get("voice_status") == "completed" else 0,
-            provider_task_id=target.get("speaker_id"),
-            project_id=target["project_id"],
-            asset_id=asset_id,
-        )
-        if job["status"] == "running":
-            job["completed_at"] = ""
-        return target
-
-    return update(mutate)
+    return Storage.update_voice_clone(user, asset_id, result, cost=POINT_RULES["voice_clone"], consume=True, create_job=True)
 
 
 @router.get("/assets/{asset_id}/voice-clone")
 def get_voice_clone(asset_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        asset = db_store.get_asset(user, asset_id)
-        if not asset:
-            not_found("asset")
-        if not asset.get("speaker_id"):
-            return asset
-        try:
-            result = ai_voice.get_voice(asset["speaker_id"])
-        except AIError as exc:
-            raise ai_error(exc) from exc
-        return db_store.update_voice_clone(user, asset_id, result, 0, now(), consume=False)
-
-    current = snapshot()
-    asset = find_by_id(current["assets"], asset_id, "asset")
-    verify_project_ownership(current, asset["project_id"], user["id"])
+    asset = Storage.get_asset(user, asset_id)
     if not asset.get("speaker_id"):
         return asset
     try:
         result = ai_voice.get_voice(asset["speaker_id"])
     except AIError as exc:
         raise ai_error(exc) from exc
-
-    def mutate(data):
-        target = find_by_id(data["assets"], asset_id, "asset")
-        verify_project_ownership(data, target["project_id"], user["id"])
-        target.update({k: v for k, v in result.items() if v is not None})
-        target["updated_at"] = now()
-        job = next(
-            (
-                item
-                for item in data.get("ai_jobs", [])
-                if item.get("asset_id") == asset_id and item.get("type") == "voice_clone" and item.get("status") == "running"
-            ),
-            None,
-        )
-        if job:
-            job["progress"] = 100 if target.get("voice_status") == "completed" else job.get("progress", 0)
-            job["updated_at"] = target["updated_at"]
-            if target.get("voice_status") == "completed":
-                job["status"] = "succeeded"
-                job["completed_at"] = target["updated_at"]
-                job["output_json"] = {"voice_url": target.get("voice_url"), "speaker_id": target.get("speaker_id")}
-            elif target.get("voice_status") == "failed":
-                job["status"] = "failed"
-                job["error"] = result.get("error")
-                job["completed_at"] = target["updated_at"]
-                refund_once(data, user["id"], job, job.get("cost_points", 0), "音色克隆失败退款", result.get("error") or "音色训练失败")
-        return target
-
-    return update(mutate)
+    return Storage.update_voice_clone(user, asset_id, result, cost=0, consume=False, create_job=False)
 
 
 @router.get("/projects/{project_id}/video-versions")
 def list_video_versions(project_id: str, episode_id: str | None = None, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        versions = db_store.list_video_versions(user, project_id, episode_id)
-        if versions is None:
-            not_found("project")
-        return versions
-
-    data = snapshot()
-    verify_project_ownership(data, project_id, user["id"])
-    versions = [v for v in data["video_versions"] if v["project_id"] == project_id]
-    if episode_id:
-        versions = [v for v in versions if v["episode_id"] == episode_id]
-    versions.sort(key=lambda x: x["created_at"], reverse=True)
-    return versions
+    return Storage.list_video_versions(user, project_id, episode_id)
 
 
 @router.delete("/video-versions/{version_id}")
 def delete_video_version(version_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        if not db_store.delete_video_version(user, version_id):
-            not_found("version")
-        return {"ok": True}
-
-    def mutate(data):
-        version = find_by_id(data["video_versions"], version_id, "version")
-        verify_project_ownership(data, version["project_id"], user["id"])
-        data["video_versions"] = [v for v in data["video_versions"] if v["id"] != version_id]
-        return {"ok": True}
-
-    return update(mutate)
+    return Storage.delete_video_version(user, version_id)
 
 
 def compose_video_file(tasks: list[dict]) -> str:
@@ -1341,97 +454,30 @@ def compose_video_file(tasks: list[dict]) -> str:
 
 @router.post("/episodes/{episode_id}/compose")
 def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        context = db_store.compose_context(user, episode_id)
-        if not context:
-            not_found("episode")
-        shots = context.get("shots", [])
-        if not shots or any(shot.get("status") != "completed" for shot in shots):
-            raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
-        shot_order = {shot["id"]: shot["no"] for shot in shots}
-        video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
-        version = db_store.save_composed_version(user, episode_id, payload, video_url, POINT_RULES["compose"], now())
-        if isinstance(version, dict) and version.get("error") == "insufficient_points":
-            raise HTTPException(status_code=402, detail="积分不足")
-        return version
-
-    current = snapshot()
-    episode = find_by_id(current["episodes"], episode_id, "episode")
-    verify_project_ownership(current, episode["project_id"], user["id"])
-    tasks = [t for t in current["video_tasks"] if t["episode_id"] == episode_id]
-    shots = [s for s in current["shots"] if s["episode_id"] == episode_id]
-    if not shots or any(s.get("status") != "completed" for s in shots):
+    context = Storage.compose_context(user, episode_id)
+    if not context:
+        not_found("episode")
+    shots = context.get("shots", [])
+    if not shots or any(shot.get("status") != "completed" for shot in shots):
         raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
     shot_order = {shot["id"]: shot["no"] for shot in shots}
-    video_url = compose_video_file(sorted(tasks, key=lambda item: shot_order.get(item.get("shot_id"), 0)))
-
-    def mutate(data):
-        target = find_by_id(data["episodes"], episode_id, "episode")
-        verify_project_ownership(data, target["project_id"], user["id"])
-        cost = POINT_RULES["compose"]
-        change_points(data, user["id"], -cost, "consume", "合成成片", f"合成《{target['title']}》成片版本")
-        add_ai_job(data, user["id"], "compose", "ffmpeg", cost, episode_id=episode_id, project_id=target["project_id"])
-        version_no = len([v for v in data["video_versions"] if v["episode_id"] == episode_id]) + 1
-        version = {
-            "id": uid("ver"),
-            "project_id": target["project_id"],
-            "episode_id": episode_id,
-            "name": payload.name if payload.name != "成片版本" else f"第{target['no']:02d}集 版本{chr(64 + version_no)}",
-            "description": payload.description,
-            "duration": payload.duration,
-            "ratio": payload.ratio,
-            "status": "exported",
-            "theme": "green" if version_no % 2 else "blue",
-            "preview_url": video_url,
-            "video_url": video_url,
-            "created_at": now(),
-        }
-        data["video_versions"].insert(0, version)
-        usage = get_user_usage(data, user["id"])
-        usage["export_used"] = min(usage["export_total"], usage["export_used"] + 1)
-        touch_episode_and_project(data, target)
-        return version
-
-    return update(mutate)
+    video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
+    return Storage.save_composed_version(user, episode_id, payload, video_url, POINT_RULES["compose"])
 
 
 @router.get("/ai-jobs/{job_id}")
 def get_ai_job(job_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        job = db_store.get_ai_job(user, job_id)
-        if not job:
-            not_found("ai job")
-        if job.get("error") == "forbidden":
-            raise HTTPException(status_code=403, detail="无权访问该任务")
-        return job
-
-    data = snapshot()
-    job = find_by_id(data.get("ai_jobs", []), job_id, "ai job")
-    if job.get("user_id") != user["id"] and user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="无权访问该任务")
-    return job
+    return Storage.get_ai_job(user, job_id)
 
 
 @router.get("/projects/{project_id}/ai-jobs")
 def list_project_ai_jobs(project_id: str, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        jobs = db_store.list_project_ai_jobs(user, project_id)
-        if jobs is None:
-            not_found("project")
-        return jobs
-
-    data = snapshot()
-    verify_project_ownership(data, project_id, user["id"])
-    return [job for job in data.get("ai_jobs", []) if job.get("project_id") == project_id][:100]
+    return Storage.list_project_ai_jobs(user, project_id)
 
 
 @router.get("/usage")
 def usage(user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        return db_store.usage(user)
-
-    data = snapshot()
-    return usage_with_members(data, user["id"])
+    return Storage.usage(user)
 
 
 @router.get("/point-rules")

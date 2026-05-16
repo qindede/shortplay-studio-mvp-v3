@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .config import STATUS_LABEL
 from .db import SessionLocal
+from .security import verify_password
 from .models import (
     AiJob,
     Asset,
@@ -77,32 +78,18 @@ def update_user_login(user_id: str, token: str, last_login: str) -> None:
         db.commit()
 
 
-def login_user(username: str, password_hash: str, token: str, last_login: str) -> dict[str, Any] | None:
+def login_user(username: str, password: str, token: str, last_login: str) -> dict[str, Any] | None:
     if SessionLocal is None:
         return None
     with SessionLocal() as db:
-        row = db.execute(
-            text(
-                """
-                UPDATE users
-                SET token = :token,
-                    last_login_at = :last_login
-                WHERE username = :username
-                  AND password_hash = :password_hash
-                  AND status = 'active'
-                RETURNING id, username, display_name, password_hash, role, status, points, token, usage_json, created_at, last_login_at
-                """
-            ),
-            {
-                "username": username,
-                "password_hash": password_hash,
-                "token": token,
-                "last_login": _dt(last_login),
-            },
-        ).mappings().first()
-        db.commit()
-        if not row:
+        user = db.scalar(select(User).where(User.username == username, User.status == "active"))
+        if not user or not verify_password(password, user.password_hash):
             return None
+        user.token = token
+        user.last_login_at = _dt(last_login)
+        db.commit()
+        db.refresh(user)
+        row = _user_dict(user)
         return {
             "id": row["id"],
             "username": row["username"],
@@ -157,16 +144,17 @@ def register_user(username: str, display_name: str, password_hash: str, token: s
         return _user_dict(user)
 
 
-def change_password(user_id: str, current_hash: str, new_hash: str) -> str:
+def change_password(user_id: str, current_password: str, new_password: str) -> str:
     if SessionLocal is None:
         raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if not user:
             return "missing"
-        if user.password_hash != current_hash:
+        if not verify_password(current_password, user.password_hash):
             return "bad_password"
-        user.password_hash = new_hash
+        from .security import hash_password
+        user.password_hash = hash_password(new_password)
         db.commit()
         return "ok"
 

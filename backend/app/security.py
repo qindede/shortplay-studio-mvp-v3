@@ -3,15 +3,21 @@ from __future__ import annotations
 import hashlib
 from typing import Annotated
 
+import bcrypt
 from fastapi import Depends, Header, HTTPException
 
-from . import db_store
 from .config import AUTH_SECRET
-from .store import snapshot
 
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(f"{AUTH_SECRET}:{password}".encode("utf-8")).hexdigest()
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    if password_hash.startswith("$2b$") or password_hash.startswith("$2a$"):
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    legacy = hashlib.sha256(f"{AUTH_SECRET}:{password}".encode("utf-8")).hexdigest()
+    return legacy == password_hash
 
 
 def public_user(user: dict) -> dict:
@@ -34,11 +40,8 @@ def find_user_by_token(data: dict, token: str | None) -> dict | None:
 
 
 def get_current_user(x_user_token: Annotated[str | None, Header(alias="X-User-Token")] = None) -> dict:
-    if db_store.enabled():
-        user = db_store.find_user_by_token(x_user_token)
-    else:
-        data = snapshot()
-        user = find_user_by_token(data, x_user_token)
+    from .storage_adapter import Storage
+    user = Storage.find_user_by_token(x_user_token)
     if not user:
         raise HTTPException(status_code=401, detail="未登录或登录已失效")
     if user.get("status") != "active":

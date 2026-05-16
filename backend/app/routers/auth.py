@@ -4,11 +4,9 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import db_store
 from ..schemas import ChangePasswordRequest, LoginRequest, RegisterRequest
 from ..security import get_current_user, hash_password, public_user
-from ..services import change_points
-from ..store import now, snapshot, uid, update
+from ..storage_adapter import Storage
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -17,65 +15,23 @@ router = APIRouter(prefix="/api", tags=["auth"])
 def register(payload: RegisterRequest):
     username = payload.username.strip().lower()
     display_name = payload.display_name.strip() or username
-
-    if db_store.enabled():
-        token = secrets.token_urlsafe(24)
-        user = db_store.register_user(username, display_name, hash_password(payload.password), token, now())
-        if user is None:
-            raise HTTPException(status_code=409, detail="用户名已存在")
-        return {"user": public_user(user), "token": token}
-
-    def mutate(data):
-        if any(u["username"].lower() == username for u in data.get("users", [])):
-            raise HTTPException(status_code=409, detail="用户名已存在")
-
-        ts = now()
-        user = {
-            "id": uid("user"),
-            "username": username,
-            "display_name": display_name,
-            "password_hash": hash_password(payload.password),
-            "role": "user",
-            "status": "active",
-            "points": 0,
-            "token": secrets.token_urlsafe(24),
-            "created_at": ts,
-            "last_login": ts,
-        }
-        data.setdefault("users", []).append(user)
-        change_points(data, user["id"], 1000, "register_bonus", "注册赠送", "新用户注册赠送积分")
-        return {"user": public_user(user), "token": user["token"]}
-
-    return update(mutate)
+    token = secrets.token_urlsafe(24)
+    user = Storage.register_user(username, display_name, hash_password(payload.password), token)
+    if user is None:
+        raise HTTPException(status_code=409, detail="用户名已存在")
+    return {"user": public_user(user), "token": token}
 
 
 @router.post("/auth/login")
 def login(payload: LoginRequest):
     username = payload.username.strip().lower()
-
-    if db_store.enabled():
-        token = secrets.token_urlsafe(24)
-        last_login = now()
-        user = db_store.login_user(username, hash_password(payload.password), token, last_login)
-        if not user:
-            existing = db_store.find_user_by_username(username)
-            if existing and existing.get("status") != "active":
-                raise HTTPException(status_code=403, detail="账号已被禁用")
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-        return {"user": public_user(user), "token": token}
-
-    def mutate(data):
-        user = next((u for u in data.get("users", []) if u["username"].lower() == username), None)
-        if not user or user.get("password_hash") != hash_password(payload.password):
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-        if user.get("status") != "active":
-            raise HTTPException(status_code=403, detail="账号已被禁用")
-
-        user["token"] = secrets.token_urlsafe(24)
-        user["last_login"] = now()
-        return {"user": public_user(user), "token": user["token"]}
-
-    return update(mutate)
+    token = secrets.token_urlsafe(24)
+    user = Storage.login_user(username, payload.password, token)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    if user.get("status") != "active":
+        raise HTTPException(status_code=403, detail="账号已被禁用")
+    return {"user": public_user(user), "token": token}
 
 
 @router.get("/me")
@@ -85,33 +41,14 @@ def me(user: dict = Depends(get_current_user)):
 
 @router.patch("/me/password")
 def change_my_password(payload: ChangePasswordRequest, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        result = db_store.change_password(user["id"], hash_password(payload.current_password), hash_password(payload.new_password))
-        if result == "missing":
-            raise HTTPException(status_code=404, detail="用户不存在")
-        if result == "bad_password":
-            raise HTTPException(status_code=400, detail="当前密码不正确")
-        return {"ok": True}
-
-    def mutate(data):
-        target = next((u for u in data.get("users", []) if u["id"] == user["id"]), None)
-        if not target:
-            raise HTTPException(status_code=404, detail="用户不存在")
-        if target.get("password_hash") != hash_password(payload.current_password):
-            raise HTTPException(status_code=400, detail="当前密码不正确")
-        target["password_hash"] = hash_password(payload.new_password)
-        return {"ok": True}
-
-    return update(mutate)
+    result = Storage.change_password(user["id"], payload.current_password, payload.new_password)
+    if result == "missing":
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if result == "bad_password":
+        raise HTTPException(status_code=400, detail="当前密码不正确")
+    return {"ok": True}
 
 
 @router.get("/me/point-ledger")
 def my_point_ledger(page: int = 1, page_size: int = 10, user: dict = Depends(get_current_user)):
-    if db_store.enabled():
-        return db_store.point_ledger(user, page, page_size)
-
-    data = snapshot()
-    rows = [e for e in data.get("point_ledger", []) if e["user_id"] == user["id"]]
-    total = len(rows)
-    start = (page - 1) * page_size
-    return {"items": rows[start:start + page_size], "total": total}
+    return Storage.point_ledger(user, page, page_size)
