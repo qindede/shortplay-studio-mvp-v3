@@ -247,12 +247,12 @@ def save_data(data: dict[str, Any]) -> None:
     if SessionLocal is None:
         raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
-        for model in [PointLedger, VideoVersion, VideoTask, AiJob, AssetReference, Asset, Shot, Episode, Project, User]:
+        for model in [PointLedger, VideoVersion, VideoTask, AiJob, AssetReference, Asset, Shot, Episode, Project]:
             db.execute(delete(model))
         db.flush()
 
         for item in data.get("users", []):
-            db.add(
+            db.merge(
                 User(
                     id=item["id"],
                     username=item["username"],

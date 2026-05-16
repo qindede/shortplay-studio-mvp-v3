@@ -18,7 +18,7 @@ def generate_image(prompt: str) -> str:
             "response_format": "url",
             "size": "2K",
             "stream": False,
-            "watermark": True,
+            "watermark": False,
         },
         AI.request_timeout,
     )

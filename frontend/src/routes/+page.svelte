@@ -369,11 +369,17 @@
   }
 
   async function bootData() {
-    dashboard = await api.dashboard();
+    const [dashboardData, ledgerData, projectData] = await Promise.all([
+      api.dashboard(),
+      api.myLedger(),
+      api.projects()
+    ]);
+
+    dashboard = dashboardData;
     usage = dashboard.usage;
     currentUser = dashboard.current_user || (await api.me());
-    pointLedger = await api.myLedger();
-    projects = await api.projects();
+    pointLedger = ledgerData;
+    projects = projectData;
 
     if (projects.length === 0) {
       currentProject = null;
@@ -391,11 +397,17 @@
   }
 
   async function refreshDashboard() {
-    dashboard = await api.dashboard();
+    const [dashboardData, ledgerData, projectData] = await Promise.all([
+      api.dashboard(),
+      api.myLedger(),
+      api.projects()
+    ]);
+
+    dashboard = dashboardData;
     usage = dashboard.usage;
     currentUser = dashboard.current_user || (await api.me());
-    pointLedger = await api.myLedger();
-    projects = await api.projects();
+    pointLedger = ledgerData;
+    projects = projectData;
 
     if (currentProject) {
       currentProject = projects.find((project) => project.id === currentProject?.id) || currentProject;
@@ -405,14 +417,18 @@
   async function selectProject(project: Project, goEpisodes = true) {
     currentProject = project;
     projectPickerOpen = false;
-    episodes = await api.episodes(project.id);
-    assets = await api.assets(project.id);
-    versions = await api.versions(project.id);
+    const [episodeData, assetData] = await Promise.all([
+      api.episodes(project.id),
+      api.assets(project.id)
+    ]);
+    episodes = episodeData;
+    assets = assetData;
 
     if (episodes.length === 0) {
       selectedEpisode = null;
       shots = [];
       videoTasks = [];
+      versions = await api.versions(project.id);
       resetEpisodeForm();
     } else {
       await selectEpisode(episodes[0], false);
@@ -424,12 +440,14 @@
   async function selectEpisode(episode: Episode, goScript = false) {
     selectedEpisode = episode;
     fillEpisodeForm(episode);
-    shots = await api.shots(episode.id);
-    videoTasks = await api.videoTasks(episode.id);
-
-    if (currentProject) {
-      versions = await api.versions(currentProject.id, episode.id);
-    }
+    const [shotData, taskData, versionData] = await Promise.all([
+      api.shots(episode.id),
+      api.videoTasks(episode.id),
+      currentProject ? api.versions(currentProject.id, episode.id) : Promise.resolve([])
+    ]);
+    shots = shotData;
+    videoTasks = taskData;
+    versions = versionData;
 
     if (goScript) activePage = 'script';
   }
