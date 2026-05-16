@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import storage
+from .. import db_store, storage
 from ..ai import image as ai_image
 from ..ai import llm as ai_llm
 from ..ai import video as ai_video
@@ -231,6 +231,9 @@ def dashboard(user: dict = Depends(get_current_user)):
 
 @router.get("/workspace/bootstrap")
 def workspace_bootstrap(user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        return db_store.workspace_bootstrap(user)
+
     data = snapshot()
     user_projects = get_user_projects(data, user["id"])
     project_ids = {p["id"] for p in user_projects}

@@ -19,7 +19,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     points: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    token: Mapped[str | None] = mapped_column(String(256))
+    token: Mapped[str | None] = mapped_column(String(256), index=True)
     usage_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -29,7 +29,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    owner_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    owner_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     short_name: Mapped[str] = mapped_column(String(32), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
@@ -44,7 +44,7 @@ class Episode(Base):
     __table_args__ = (UniqueConstraint("project_id", "no"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     no: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     summary: Mapped[str] = mapped_column(Text, default="")
@@ -59,7 +59,7 @@ class Shot(Base):
     __table_args__ = (UniqueConstraint("episode_id", "no"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    episode_id: Mapped[str] = mapped_column(String, ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False)
+    episode_id: Mapped[str] = mapped_column(String, ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False, index=True)
     no: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
     visual: Mapped[str] = mapped_column(Text, default="")
@@ -75,7 +75,7 @@ class Asset(Base):
     __tablename__ = "assets"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
@@ -94,7 +94,7 @@ class AssetReference(Base):
     __tablename__ = "asset_references"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    asset_id: Mapped[str] = mapped_column(String, ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String, ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     url: Mapped[str | None] = mapped_column(Text)
@@ -106,9 +106,9 @@ class AiJob(Base):
     __tablename__ = "ai_jobs"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    project_id: Mapped[str | None] = mapped_column(String, ForeignKey("projects.id"))
-    episode_id: Mapped[str | None] = mapped_column(String, ForeignKey("episodes.id"))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    project_id: Mapped[str | None] = mapped_column(String, ForeignKey("projects.id"), index=True)
+    episode_id: Mapped[str | None] = mapped_column(String, ForeignKey("episodes.id"), index=True)
     shot_id: Mapped[str | None] = mapped_column(String, ForeignKey("shots.id"))
     asset_id: Mapped[str | None] = mapped_column(String, ForeignKey("assets.id"))
     type: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -129,7 +129,7 @@ class VideoTask(Base):
     __tablename__ = "video_tasks"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    episode_id: Mapped[str] = mapped_column(String, ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False)
+    episode_id: Mapped[str] = mapped_column(String, ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False, index=True)
     shot_id: Mapped[str] = mapped_column(String, ForeignKey("shots.id", ondelete="CASCADE"), nullable=False)
     ai_job_id: Mapped[str | None] = mapped_column(String, ForeignKey("ai_jobs.id"))
     title: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -148,8 +148,8 @@ class VideoVersion(Base):
     __tablename__ = "video_versions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    episode_id: Mapped[str] = mapped_column(String, ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    episode_id: Mapped[str] = mapped_column(String, ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     duration: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -165,7 +165,7 @@ class PointLedger(Base):
     __tablename__ = "point_ledger"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     scene: Mapped[str] = mapped_column(String(120), nullable=False)
