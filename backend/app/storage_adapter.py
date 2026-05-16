@@ -7,8 +7,9 @@ from fastapi import HTTPException
 
 from . import db_store
 from .config import POINT_RULES
-from .security import public_user
+from .security import hash_password, public_user, verify_password
 from .services import (
+    add_ai_job,
     change_points,
     comparable_asset_names,
     enrich_episode,
@@ -19,9 +20,11 @@ from .services import (
     normalize_refs,
     not_found,
     renumber,
+    refund_once,
     touch_episode_and_project,
     touch_project,
     usage_with_members,
+    user_in_data,
     verify_project_ownership,
 )
 from .store import now, snapshot, uid, update
@@ -33,16 +36,7 @@ class Storage:
     # ── helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
-    def _ts(timestamp: str | None = None) -> str:
-        return timestamp or now()
-
-    # ── READ ─────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def dashboard(user: dict) -> dict:
-        if db_store.enabled():
-            return db_store.dashboard(user)
-        data = snapshot()
+    def _json_dashboard(data: dict, user: dict) -> dict:
         user_projects = get_user_projects(data, user["id"])
         project_ids = {p["id"] for p in user_projects}
         return {
@@ -54,21 +48,21 @@ class Storage:
             "current_user": user,
         }
 
+    # ── READ ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def dashboard(user: dict) -> dict:
+        if db_store.enabled():
+            return db_store.dashboard(user)
+        return Storage._json_dashboard(snapshot(), user)
+
     @staticmethod
     def workspace_bootstrap(user: dict) -> dict:
         if db_store.enabled():
             return db_store.workspace_bootstrap(user)
         data = snapshot()
+        dashboard_data = Storage._json_dashboard(data, user)
         user_projects = get_user_projects(data, user["id"])
-        project_ids = {p["id"] for p in user_projects}
-        dashboard_data = {
-            "project_count": len(user_projects),
-            "episode_count": len([e for e in data["episodes"] if e["project_id"] in project_ids]),
-            "version_count": len([v for v in data["video_versions"] if v["project_id"] in project_ids]),
-            "asset_count": len([a for a in data["assets"] if a["project_id"] in project_ids]),
-            "usage": usage_with_members(data, user["id"]),
-            "current_user": user,
-        }
         ledger_rows = [e for e in data.get("point_ledger", []) if e["user_id"] == user["id"]]
         projects = [enrich_project(data, p) for p in user_projects]
 
@@ -322,7 +316,6 @@ class Storage:
                     shot["updated_at"] = task["updated_at"]
                 if task.get("status") == "failed":
                     refund_target = job or task
-                    from .services import refund_once
                     refund_once(data, user["id"], refund_target, task["duration"] * POINT_RULES["video_second"], "视频生成失败退款", task.get("error") or "视频任务失败")
             tasks.sort(key=lambda x: x["updated_at"], reverse=True)
             return tasks
@@ -472,7 +465,7 @@ class Storage:
             asset = db_store.create_asset(user, project_id, payload, refs, cost, now())
             if asset is None:
                 not_found("project")
-            if asset.get("error") == "points":
+            if asset.get("error") == "insufficient_points":
                 raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
             return asset
 
@@ -620,7 +613,6 @@ class Storage:
             target.update({k: v for k, v in result.items() if v is not None})
             target["updated_at"] = now()
             if create_job:
-                from .services import add_ai_job
                 job = add_ai_job(
                     data, user["id"], "voice_clone", "volc_voice", cost or 0,
                     status="succeeded" if target.get("voice_status") == "completed" else "running",
@@ -747,7 +739,6 @@ class Storage:
 
         def mutate(data):
             change_points(data, user["id"], -cost, "consume", "生成短剧大纲", f"智能生成《{project_name}》短剧大纲")
-            from .services import add_ai_job
             add_ai_job(data, user["id"], "outline", "minimax", cost)
             return {"cost": cost, "episodes": episodes}
 
@@ -762,8 +753,6 @@ class Storage:
             if isinstance(result, dict) and result.get("error") == "insufficient_points":
                 raise HTTPException(status_code=402, detail="积分不足")
             return result
-
-        from .services import get_user_usage
 
         def mutate(data):
             target = find_by_id(data["episodes"], episode_id, "episode")
@@ -861,8 +850,6 @@ class Storage:
                 raise HTTPException(status_code=402, detail="积分不足")
             return task
 
-        from .services import add_ai_job
-
         def mutate(data):
             shot = find_by_id(data["shots"], shot_id, "shot")
             episode = next((e for e in data["episodes"] if e["id"] == shot["episode_id"]), None)
@@ -910,8 +897,6 @@ class Storage:
                     tasks.append(task)
             return tasks
 
-        from .services import add_ai_job
-
         def mutate(data):
             target_episode = find_by_id(data["episodes"], episode_id, "episode")
             verify_project_ownership(data, target_episode["project_id"], user["id"])
@@ -957,8 +942,6 @@ class Storage:
             if isinstance(version, dict) and version.get("error") == "insufficient_points":
                 raise HTTPException(status_code=402, detail="积分不足")
             return version
-
-        from .services import add_ai_job
 
         def mutate(data):
             target = find_by_id(data["episodes"], episode_id, "episode")
@@ -1023,8 +1006,6 @@ class Storage:
                 not_found("user")
             return updated
 
-        from .services import user_in_data
-
         def mutate(data):
             target = user_in_data(data, user_id)
             if role is not None:
@@ -1043,8 +1024,6 @@ class Storage:
                 not_found("user")
             return result
 
-        from .services import user_in_data
-
         def mutate(data):
             entry = change_points(data, user_id, amount, "admin_adjust", "管理员调整", reason)
             return {"entry": entry, "user": public_user(user_in_data(data, user_id))}
@@ -1058,8 +1037,6 @@ class Storage:
             if not updated:
                 not_found("user")
             return {"user": updated}
-
-        from .services import user_in_data
 
         def mutate(data):
             target = user_in_data(data, user_id)
@@ -1108,8 +1085,6 @@ class Storage:
 
     @staticmethod
     def login_user(username: str, password: str, token: str, last_login: str | None = None) -> dict | None:
-        from .security import verify_password
-
         if db_store.enabled():
             return db_store.login_user(username, password, token, last_login or now())
 
@@ -1127,12 +1102,8 @@ class Storage:
 
     @staticmethod
     def change_password(user_id: str, current_password: str, new_password: str) -> str:
-        from .security import hash_password, verify_password
-
         if db_store.enabled():
             return db_store.change_password(user_id, current_password, new_password)
-
-        from .services import user_in_data
 
         def mutate(data):
             target = next((u for u in data.get("users", []) if u["id"] == user_id), None)

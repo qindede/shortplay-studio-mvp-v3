@@ -9,7 +9,11 @@
       "Bash(python -c ' *)",
       "Bash(curl -s \"https://unsplash.com/napi/search/photos?query=chinese+man+suit+portrait&per_page=5\" -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0\")",
       "Bash(curl -s \"https://unsplash.com/napi/search/photos?query=asian+woman+confident+dramatic+portrait&per_page=5\" -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0\")",
-      "Bash(python -m alembic upgrade head)"
+      "Bash(python -m alembic upgrade head)",
+      "Bash(python -c \"from app.services import *; print\\('services.py OK'\\)\")",
+      "Bash(python -c \"from app.store import *; print\\('store OK'\\)\")",
+      "Bash(python -c \"from app.main import app; print\\('main OK'\\)\")",
+      "Bash(pnpm build *)"
     ]
   }
 }

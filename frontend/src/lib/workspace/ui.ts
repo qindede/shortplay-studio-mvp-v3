@@ -60,13 +60,16 @@ const statusLabels: Record<Status, string> = {
   failed: '生成失败'
 };
 
+const STATUS_CLASS_MAP: Record<string, string> = {
+  active: 'green', completed: 'green', storyboard_ready: 'green', exported: 'green',
+  generating: 'blue', review: 'blue',
+  draft: 'amber', pending: 'amber',
+  needs_review: 'purple',
+  failed: 'red'
+};
+
 export function getStatusClass(status: string) {
-  if (['active', 'completed', 'storyboard_ready', 'exported'].includes(status)) return 'green';
-  if (['generating', 'review'].includes(status)) return 'blue';
-  if (['draft', 'pending'].includes(status)) return 'amber';
-  if (['needs_review'].includes(status)) return 'purple';
-  if (['failed'].includes(status)) return 'red';
-  return 'gray';
+  return STATUS_CLASS_MAP[status] || 'gray';
 }
 
 export function getStatusLabel(status: string) {

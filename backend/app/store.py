@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from . import db_store
-from .config import DEFAULT_USAGE
+from .config import apply_usage_defaults
 from .security import hash_password as default_password_hash
 from .seed_data import seed_data
 from .utils import now, uid
@@ -155,8 +155,7 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
             user.setdefault("created_at", now())
             user.setdefault("last_login", "")
             user.setdefault("usage", {})
-            for key, value in DEFAULT_USAGE.items():
-                user["usage"].setdefault(key, value)
+            apply_usage_defaults(user["usage"])
     if "point_ledger" not in data:
         data["point_ledger"] = []
         for user in data["users"]:
@@ -176,15 +175,12 @@ def normalize_data(data: dict[str, Any]) -> dict[str, Any]:
             )
         changed = True
     data.setdefault("usage", {})
-    for key, value in DEFAULT_USAGE.items():
-        data["usage"].setdefault(key, value)
+    apply_usage_defaults(data["usage"])
     data["usage"]["team_members"] = len([u for u in data.get("users", []) if u.get("status") == "active"])
-    if changed:
-        save_data(data)
-    return data
+    return data, changed
 
 
-def ensure_data_file() -> None:
+def _ensure_data_file() -> None:
     if not DATA_PATH.exists():
         DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
         DATA_PATH.write_text(json.dumps(seed_data(), ensure_ascii=False, indent=2), encoding="utf-8")
@@ -196,12 +192,17 @@ def load_data() -> dict[str, Any]:
         if not data.get("users") and not data.get("projects"):
             data = seed_data()
             db_store.save_data(data)
-        return normalize_data(data)
+        data, _ = normalize_data(data)
+        return data
 
-    ensure_data_file()
+    _ensure_data_file()
     with _LOCK:
         data = json.loads(DATA_PATH.read_text(encoding="utf-8"))
-    return normalize_data(data)
+        data, changed = normalize_data(data)
+        if changed:
+            DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+            DATA_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return data
 
 
 def save_data(data: dict[str, Any]) -> None:

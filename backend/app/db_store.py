@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 
-from .config import DEFAULT_USAGE, STATUS_LABEL
+from .config import DEFAULT_USAGE, STATUS_LABEL, apply_usage_defaults
 from .db import SessionLocal
 from .security import verify_password
 from .utils import uid
@@ -641,9 +641,7 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
-        usage = {**(user.get("usage") or {})}
-        for _k, _v in DEFAULT_USAGE.items():
-            usage.setdefault(_k, _v)
+        usage = apply_usage_defaults({**(user.get("usage") or {})})
         row = db.execute(
             text(
                 """
@@ -1093,9 +1091,7 @@ def dashboard(user: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
-        usage = {**(user.get("usage") or {})}
-        for _k, _v in DEFAULT_USAGE.items():
-            usage.setdefault(_k, _v)
+        usage = apply_usage_defaults({**(user.get("usage") or {})})
         row = db.execute(
             text(
                 """
@@ -1295,7 +1291,7 @@ def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> di
     safe_size = min(100, max(1, page_size))
     offset = (safe_page - 1) * safe_size
     with SessionLocal() as db:
-        total = db.query(PointLedger).filter(PointLedger.user_id == user["id"]).count()
+        total = db.scalar(select(func.count(PointLedger.id)).where(PointLedger.user_id == user["id"]))
         rows = db.scalars(
             select(PointLedger)
             .where(PointLedger.user_id == user["id"])
@@ -1325,8 +1321,18 @@ def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> di
 
 
 def get_project(user: dict[str, Any], project_id: str) -> dict[str, Any] | None:
-    projects = list_projects(user)
-    return next((project for project in projects if project["id"] == project_id), None)
+    if SessionLocal is None:
+        raise RuntimeError("DATABASE_URL is not configured")
+    with SessionLocal() as db:
+        project = db.scalar(
+            select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"])
+        )
+        if not project:
+            return None
+        episode_count = db.scalar(select(func.count(Episode.id)).where(Episode.project_id == project_id)) or 0
+        asset_count = db.scalar(select(func.count(Asset.id)).where(Asset.project_id == project_id)) or 0
+        version_count = db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.project_id == project_id)) or 0
+        return _project_dict(project, episode_count, asset_count, version_count)
 
 
 def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[str, Any]:
@@ -1407,8 +1413,8 @@ def get_episode(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
         )
         if not episode:
             return None
-        shot_count = db.query(Shot).filter(Shot.episode_id == episode.id).count()
-        version_count = db.query(VideoVersion).filter(VideoVersion.episode_id == episode.id).count()
+        shot_count = db.scalar(select(func.count(Shot.id)).where(Shot.episode_id == episode.id))
+        version_count = db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.episode_id == episode.id))
         return _episode_dict(episode, shot_count, version_count)
 
 
@@ -1557,9 +1563,10 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any, refs: list
         target_user = db.get(User, user["id"])
         if not project or not target_user:
             return None
-        if target_user.points - cost < 0:
-            return {"error": "points"}
-        target_user.points -= cost
+        try:
+            _change_points(db, user["id"], -cost, "consume", "创建素材", f"创建素材《{payload.name}》", ts)
+        except ValueError as exc:
+            return {"error": str(exc)}
         asset = Asset(
             id=uid("asset"),
             project_id=project_id,
@@ -1588,7 +1595,6 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any, refs: list
                     sort_order=index,
                 )
             )
-        db.add(PointLedger(id=uid("ledger"), user_id=user["id"], amount=-cost, type="consume", scene="创建素材", description=f"创建素材《{payload.name}》", balance_after=target_user.points, created_at=ts))
         if visual_asset:
             usage = dict(target_user.usage_json or {})
             usage.setdefault("image_total", 1000)
@@ -1690,12 +1696,14 @@ def update_asset(user: dict[str, Any], asset_id: str, payload: Any, refs: list[d
         project = db.get(Project, asset.project_id)
         if project:
             project.updated_at = ts
-        db.commit()
+        db.flush()
         ref_dicts = refs if refs is not None else [
             {"id": ref.id, "type": ref.type, "name": ref.name, "url": ref.url, "note": ref.note}
             for ref in db.scalars(select(AssetReference).where(AssetReference.asset_id == asset_id).order_by(AssetReference.sort_order))
         ]
-        return _asset_dict(asset, ref_dicts)
+        result = _asset_dict(asset, ref_dicts)
+        db.commit()
+        return result
 
 
 def delete_asset(user: dict[str, Any], asset_id: str) -> bool:
@@ -1814,7 +1822,7 @@ def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, v
         except ValueError as exc:
             return {"error": str(exc)}
         _add_ai_job(db, user["id"], "compose", "ffmpeg", cost, ts, episode_id=episode_id, project_id=episode.project_id)
-        version_no = db.query(VideoVersion).filter(VideoVersion.episode_id == episode_id).count() + 1
+        version_no = db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.episode_id == episode_id)) + 1
         version = VideoVersion(
             id=uid("ver"),
             project_id=episode.project_id,
@@ -1850,10 +1858,8 @@ def usage(user: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         db_user = db.get(User, user["id"])
-        usage_data = dict((db_user.usage_json if db_user else user.get("usage")) or {})
-        for _k, _v in DEFAULT_USAGE.items():
-            usage_data.setdefault(_k, _v)
-        usage_data["team_members"] = db.query(User).filter(User.status == "active").count()
+        usage_data = apply_usage_defaults(dict((db_user.usage_json if db_user else user.get("usage")) or {}))
+        usage_data["team_members"] = db.scalar(select(func.count(User.id)).where(User.status == "active"))
         return usage_data
 
 

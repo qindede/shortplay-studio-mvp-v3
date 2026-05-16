@@ -61,6 +61,12 @@ DEFAULT_USAGE = {
     "export_used": 0,
 }
 
+def apply_usage_defaults(usage: dict) -> dict:
+    for key, value in DEFAULT_USAGE.items():
+        usage.setdefault(key, value)
+    return usage
+
+
 STATUS_LABEL = {
     "active": "制作中",
     "review": "待审核",

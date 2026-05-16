@@ -85,10 +85,6 @@
   let episodeDialogOpen = false;
   let episodeSubmitting = false;
   let episodeFormError = '';
-  let newEpisodeTitle = '';
-  let newEpisodeSummary = '';
-  let newEpisodeScript = '';
-  let newEpisodeDuration = 30;
   let projectDialogOpen = false;
   let editingProject: Project | null = null;
   let projectName = '';
@@ -120,10 +116,10 @@
   }
 
   function resetNewEpisodeForm() {
-    newEpisodeTitle = `第${episodes.length + 1}集`;
-    newEpisodeSummary = '';
-    newEpisodeScript = '';
-    newEpisodeDuration = 30;
+    episodeTitle = `第${episodes.length + 1}集`;
+    episodeSummary = '';
+    episodeScript = '';
+    episodeDuration = 30;
     episodeSubmitting = false;
     episodeFormError = '';
   }
@@ -305,7 +301,7 @@
     }
 
     setAuthToken(token);
-    await loadMeAndBoot();
+    await boot();
   }
 
   async function safeRun(fn: () => Promise<void>) {
@@ -346,23 +342,14 @@
     resetWorkspaceState();
   }
 
-  async function loadMeAndBoot() {
-    loading = true;
-    await safeRun(async () => {
-      currentUser = await api.me();
-      if (currentUser.role === 'admin') {
-        goto('/admin');
-        return;
-      }
-      await bootData();
-    });
-    loading = false;
-  }
-
   async function boot() {
     loading = true;
     await safeRun(async () => {
       if (!currentUser) currentUser = await api.me();
+      if (currentUser.role === 'admin') {
+        goto('/admin');
+        return;
+      }
       await bootData();
     });
     loading = false;
@@ -408,20 +395,14 @@
   }
 
   async function refreshDashboard() {
-    const [dashboardData, ledgerData, projectData] = await Promise.all([
-      api.dashboard(),
-      api.myLedger(),
-      api.projects()
-    ]);
-
-    dashboard = dashboardData;
+    const bootstrap = await api.workspaceBootstrap();
+    dashboard = bootstrap.dashboard;
     usage = dashboard.usage;
-    currentUser = dashboard.current_user || (await api.me());
-    pointLedger = ledgerData;
-    projects = projectData;
-
+    currentUser = dashboard.current_user || currentUser;
+    pointLedger = bootstrap.point_ledger;
+    projects = bootstrap.projects;
     if (currentProject) {
-      currentProject = projects.find((project) => project.id === currentProject?.id) || currentProject;
+      currentProject = projects.find((p) => p.id === currentProject?.id) || currentProject;
     }
   }
 
@@ -631,8 +612,8 @@
     const project = currentProject;
     if (!project || episodeSubmitting) return;
 
-    const title = newEpisodeTitle.trim();
-    const summary = newEpisodeSummary.trim();
+    const title = episodeTitle.trim();
+    const summary = episodeSummary.trim();
     episodeFormError = '';
     error = '';
 
@@ -646,8 +627,8 @@
       const episode = await api.createEpisode(project.id, {
         title,
         summary,
-        script: newEpisodeScript.trim() || summary,
-        duration_target: Math.max(1, Number(newEpisodeDuration) || 30)
+        script: episodeScript.trim() || summary,
+        duration_target: Math.max(1, Number(episodeDuration) || 30)
       });
 
       episodes = await api.episodes(project.id);
@@ -1055,17 +1036,17 @@
           <div class="field-grid">
             <div class="field">
               <label for="new-episode-title">剧情标题</label>
-              <input id="new-episode-title" bind:value={newEpisodeTitle} placeholder={`第${episodes.length + 1}集`} />
+              <input id="new-episode-title" bind:value={episodeTitle} placeholder={`第${episodes.length + 1}集`} />
             </div>
             <div class="field">
               <label for="new-episode-duration">目标时长（秒）</label>
-              <input id="new-episode-duration" type="number" min="1" bind:value={newEpisodeDuration} />
+              <input id="new-episode-duration" type="number" min="1" bind:value={episodeDuration} />
             </div>
           </div>
 
           <div class="field">
             <label for="new-episode-summary">剧情摘要</label>
-            <input id="new-episode-summary" bind:value={newEpisodeSummary} placeholder="一句话说明本集冲突、转折和结尾钩子" />
+            <input id="new-episode-summary" bind:value={episodeSummary} placeholder="一句话说明本集冲突、转折和结尾钩子" />
           </div>
 
           <div class="field episode-description-field">
@@ -1073,14 +1054,14 @@
             <div class="prompt-field">
               <textarea
                 id="new-episode-script"
-                bind:value={newEpisodeScript}
+                bind:value={episodeScript}
                 placeholder="写下本集剧情正文、关键对白、反转节奏或结尾悬念"
               ></textarea>
               <PromptOptimizeButton
-                value={newEpisodeScript}
+                value={episodeScript}
                 context="episode_script"
                 {projectName}
-                onOptimized={(v) => (newEpisodeScript = v)}
+                onOptimized={(v) => (episodeScript = v)}
               />
             </div>
           </div>
