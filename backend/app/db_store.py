@@ -558,6 +558,7 @@ def save_storyboard(
                     updated_at=ts,
                 )
                 db.add(asset)
+                db.flush()
                 for index, ref in enumerate(item.get("references", []) or []):
                     db.add(AssetReference(id=ref.get("id") or uid("ref"), asset_id=asset.id, type=ref.get("type", "image"), name=ref.get("name", f"参考 {index + 1}"), url=ref.get("url"), note=ref.get("note"), sort_order=index))
                 _add_ai_job(db, user["id"], "image_asset", "seedream", asset_cost, ts, project_id=episode.project_id, asset_id=asset.id)
@@ -639,6 +640,7 @@ def create_video_task(user: dict[str, Any], shot_id: str, provider_task_id: str,
         except ValueError as exc:
             return {"error": str(exc)}
         job = _add_ai_job(db, user["id"], "video_shot", "seedance", cost, ts, status="running", progress=0, provider_task_id=provider_task_id, episode_id=shot.episode_id, shot_id=shot.id, project_id=episode.project_id if episode else None)
+        db.flush()
         task = db.scalar(select(VideoTask).where(VideoTask.shot_id == shot.id))
         if not task:
             task = VideoTask(id=uid("task"), episode_id=shot.episode_id, shot_id=shot.id, duration=duration, title=shot.title, progress=0, status="generating", updated_at=ts)
@@ -1380,6 +1382,7 @@ def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[s
     )
     with SessionLocal() as db:
         db.add(project)
+        db.flush()
         for index, item in enumerate(payload.episodes, start=1):
             db.add(
                 Episode(
@@ -1609,6 +1612,7 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any, refs: list
             updated_at=ts,
         )
         db.add(asset)
+        db.flush()
         for index, ref in enumerate(refs):
             db.add(
                 AssetReference(
@@ -1661,6 +1665,7 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any, generate
             updated_at=ts,
         )
         db.add(asset)
+        db.flush()
         for index, ref in enumerate(refs):
             db.add(AssetReference(id=ref.get("id") or uid("ref"), asset_id=asset.id, type=ref.get("type", "image"), name=ref.get("name", f"参考 {index + 1}"), url=ref.get("url"), note=ref.get("note"), sort_order=index))
         _add_ai_job(db, user["id"], "image_asset" if visual_asset else "audio_asset", provider, cost, ts, project_id=project_id, asset_id=asset.id)
