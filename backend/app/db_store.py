@@ -636,6 +636,43 @@ def create_video_task(user: dict[str, Any], shot_id: str, provider_task_id: str,
         return _video_task_dict(task)
 
 
+def update_video_task_from_provider(task: dict[str, Any], remote: dict[str, Any]) -> None:
+    """Update a video task dict (and its DB row) from remote provider data."""
+    if SessionLocal is None:
+        return
+    updated = {k: v for k, v in remote.items() if v is not None}
+    task.update(updated)
+    ts = datetime.now()
+    task["updated_at"] = ts.isoformat()
+    with SessionLocal() as db:
+        row = db.get(VideoTask, task["id"])
+        if not row:
+            return
+        for key in ("progress", "status", "preview_url", "video_url", "error"):
+            if key in updated:
+                setattr(row, key, updated[key])
+        row.updated_at = ts
+        if task.get("status") in {"completed", "failed"}:
+            shot = db.get(Shot, row.shot_id)
+            if shot:
+                shot.status = task["status"]
+                shot.updated_at = ts
+            if row.ai_job_id:
+                job = db.get(AiJob, row.ai_job_id)
+                if job:
+                    job.progress = task.get("progress", job.progress)
+                    job.updated_at = ts
+                    if task["status"] == "completed":
+                        job.status = "succeeded"
+                        job.completed_at = ts
+                        job.output_json = json.dumps({"video_url": task.get("video_url")})
+                    else:
+                        job.status = "failed"
+                        job.error = task.get("error")
+                        job.completed_at = ts
+        db.commit()
+
+
 def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
     if SessionLocal is None:
         raise RuntimeError("DATABASE_URL is not configured")
@@ -1928,9 +1965,35 @@ def _dt(value: Any) -> datetime | None:
     return None
 
 
+def _ensure_seed_data() -> None:
+    """Create default users and load seed data if the database is empty."""
+    if SessionLocal is None:
+        return
+    with SessionLocal() as db:
+        has_users = db.scalar(select(User.id).limit(1))
+        if has_users:
+            return
+        from .security import hash_password
+        from .seed_data import seed_data
+        ts = datetime.now()
+        for username, display_name, role, points in [
+            ("admin", "管理员", "admin", 100000),
+            ("demo", "演示用户", "user", 2000),
+        ]:
+            db.add(User(
+                id=uid("user"), username=username, display_name=display_name,
+                password_hash=hash_password("admin123" if role == "admin" else "demo123"),
+                role=role, status="active", points=points, token=None,
+                usage_json={}, created_at=ts, last_login_at=None,
+            ))
+        db.commit()
+    save_data(seed_data())
+
+
 def load_data() -> dict[str, Any]:
     if SessionLocal is None:
         raise RuntimeError("DATABASE_URL is not configured")
+    _ensure_seed_data()
     with SessionLocal() as db:
         users = list(db.scalars(select(User)))
         user_by_id = {user.id: user for user in users}

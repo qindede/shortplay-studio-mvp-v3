@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from .config import POINT_RULES, STATUS_LABEL, apply_usage_defaults
-from .store import now, uid
+from .utils import now, uid
 
 
 def ensure_usage_defaults(usage: dict) -> dict:

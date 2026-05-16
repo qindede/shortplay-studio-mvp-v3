@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 
 from ..security import get_current_user
 from .. import storage
-from ..store import UPLOAD_DIR
+from ..config import UPLOAD_DIR
 
 ALLOWED_TYPES = {
     "image/jpeg", "image/png", "image/webp",

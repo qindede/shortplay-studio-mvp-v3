@@ -54,10 +54,10 @@ Default accounts documented by the project:
 - `backend/app/main.py`: FastAPI app setup, CORS, router registration, uploads mount.
 - `backend/app/routers/`: API route modules grouped by domain.
 - `backend/app/schemas.py`: API data shapes.
-- `backend/app/store.py`: JSON-backed persistence helpers and upload paths.
+- `backend/app/db_store.py`: PostgreSQL persistence layer (SQLAlchemy ORM).
+- `backend/app/storage_adapter.py`: thin facade over db_store with consistent error handling.
 - `backend/app/services.py`: business logic shared by routers.
 - `backend/app/security.py`: auth and current-user helpers.
-- `backend/data/db.json`: local development data.
 - `frontend/src/lib/api.ts`: frontend API client and shared TypeScript types.
 - `frontend/src/routes/+page.svelte`: main user workspace route.
 - `frontend/src/routes/admin/+page.svelte`: admin console route.

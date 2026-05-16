@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -13,6 +14,8 @@ if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "")
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 @dataclass(frozen=True)

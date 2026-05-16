@@ -8,7 +8,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import db_store, storage
-from app.store import DATA_PATH, UPLOAD_DIR
+from app.config import UPLOAD_DIR
+
+DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "db.json"
 
 
 def replace_value(value, mapping: dict[str, str]):
