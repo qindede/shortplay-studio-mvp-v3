@@ -49,7 +49,10 @@
     cost: number;
     assetCost: number;
     selected: Record<string, boolean>;
-    resolve: (assets: StoryboardAssetCandidate[] | null) => void;
+    phase: 'confirming' | 'generating' | 'failed';
+    error: string;
+    episodeId: string;
+    resolve: (completed: boolean) => void;
   };
 
   let activePage: PageKey = 'projects';
@@ -226,33 +229,48 @@
     return `${asset.type}:${asset.name}`;
   }
 
-  function requestStoryboardAssetConfirmation(assetsToCreate: StoryboardAssetCandidate[], cost: number, assetCost: number) {
-    return new Promise<StoryboardAssetCandidate[] | null>((resolve) => {
+  function requestStoryboardAssetConfirmation(episodeId: string, assetsToCreate: StoryboardAssetCandidate[], cost: number, assetCost: number) {
+    return new Promise<boolean>((resolve) => {
       storyboardAssetConfirm = {
         assets: assetsToCreate,
         cost,
         assetCost,
         selected: Object.fromEntries(assetsToCreate.map((asset) => [assetCandidateKey(asset), true])),
+        phase: 'confirming',
+        error: '',
+        episodeId,
         resolve
       };
     });
   }
 
   function cancelStoryboardAssetConfirm() {
-    if (!storyboardAssetConfirm) return;
-    storyboardAssetConfirm.resolve(null);
+    if (!storyboardAssetConfirm || storyboardAssetConfirm.phase === 'generating') return;
+    storyboardAssetConfirm.resolve(false);
     storyboardAssetConfirm = null;
   }
 
-  function confirmStoryboardAssetDialog() {
-    if (!storyboardAssetConfirm) return;
-    const selectedAssets = storyboardAssetConfirm.assets.filter((asset) => storyboardAssetConfirm?.selected[assetCandidateKey(asset)]);
-    storyboardAssetConfirm.resolve(selectedAssets);
-    storyboardAssetConfirm = null;
+  async function confirmStoryboardAssetDialog() {
+    if (!storyboardAssetConfirm || storyboardAssetConfirm.phase === 'generating') return;
+    const currentConfirm = storyboardAssetConfirm;
+    const selectedAssets = currentConfirm.assets.filter((asset) => currentConfirm.selected[assetCandidateKey(asset)]);
+    storyboardAssetConfirm = { ...currentConfirm, phase: 'generating', error: '' };
+
+    try {
+      await runStoryboardGeneration(currentConfirm.episodeId, selectedAssets);
+      currentConfirm.resolve(true);
+      storyboardAssetConfirm = null;
+    } catch (err) {
+      storyboardAssetConfirm = {
+        ...currentConfirm,
+        phase: 'failed',
+        error: err instanceof Error ? err.message : '素材或分镜生成失败'
+      };
+    }
   }
 
   function toggleStoryboardAsset(asset: StoryboardAssetCandidate) {
-    if (!storyboardAssetConfirm) return;
+    if (!storyboardAssetConfirm || storyboardAssetConfirm.phase !== 'confirming') return;
     const key = assetCandidateKey(asset);
     storyboardAssetConfirm = {
       ...storyboardAssetConfirm,
@@ -698,18 +716,22 @@
 
   async function generateStoryboardWithAssetCheck(episodeId: string) {
     const preparation = await api.prepareStoryboard(episodeId);
-    let confirmedAssets: StoryboardAssetCandidate[] = [];
 
     if (preparation.missing_assets.length > 0) {
-      const selectedAssets = await requestStoryboardAssetConfirmation(
+      const completed = await requestStoryboardAssetConfirmation(
+        episodeId,
         preparation.missing_assets,
         preparation.cost,
         preparation.asset_cost
       );
-      if (selectedAssets === null) return;
-      confirmedAssets = selectedAssets;
+      if (!completed) return;
+      return;
     }
 
+    await runStoryboardGeneration(episodeId, []);
+  }
+
+  async function runStoryboardGeneration(episodeId: string, confirmedAssets: StoryboardAssetCandidate[]) {
     shots = await api.generateStoryboard(episodeId, { confirmed_assets: confirmedAssets });
     if (currentProject) {
       assets = await api.assets(currentProject.id);
@@ -1163,13 +1185,35 @@
       <div class="modal-panel storyboard-asset-modal" role="dialog" aria-modal="true" aria-labelledby="storyboard-asset-title">
         <div class="modal-head">
           <div>
-            <div class="modal-title-accent" id="storyboard-asset-title">生成分镜前需要补充素材</div>
-            <div class="panel-subtitle">系统检测到本集包含项目中尚未创建的角色或场景。确认后将自动生成选中的素材，并用于后续分镜。</div>
+            <div class="modal-title-accent" id="storyboard-asset-title">
+              {storyboardAssetConfirm.phase === 'generating' ? '正在生成素材和分镜' : storyboardAssetConfirm.phase === 'failed' ? '生成失败' : '生成分镜前需要补充素材'}
+            </div>
+            <div class="panel-subtitle">
+              {storyboardAssetConfirm.phase === 'generating'
+                ? '系统正在生成选中的素材，并继续生成本集镜头表。完成后会自动更新分镜。'
+                : storyboardAssetConfirm.phase === 'failed'
+                  ? '素材或分镜没有完成生成，请查看错误后重试。'
+                  : '系统检测到本集包含项目中尚未创建的角色或场景。确认后将自动生成选中的素材，并用于后续分镜。'}
+            </div>
           </div>
-          <button class="modal-close" aria-label="关闭" on:click={cancelStoryboardAssetConfirm}>×</button>
+          <button class="modal-close" aria-label="关闭" disabled={storyboardAssetConfirm.phase === 'generating'} on:click={cancelStoryboardAssetConfirm}>×</button>
         </div>
 
         <div class="modal-body">
+          {#if storyboardAssetConfirm.phase === 'generating'}
+            <div class="storyboard-progress-card">
+              <div class="loading-dot"></div>
+              <div>
+                <b>生成任务进行中</b>
+                <span>已确认 {storyboardSelectedCount} 个新素材，正在依次生成素材图片和分镜内容。</span>
+              </div>
+            </div>
+          {/if}
+
+          {#if storyboardAssetConfirm.phase === 'failed'}
+            <div class="error compact-alert">{storyboardAssetConfirm.error}</div>
+          {/if}
+
           <div class="storyboard-asset-summary">
             <div>
               <span>分镜生成</span>
@@ -1195,6 +1239,7 @@
               <button
                 class="storyboard-asset-item"
                 class:selected={storyboardAssetConfirm.selected[key]}
+                disabled={storyboardAssetConfirm.phase === 'generating'}
                 type="button"
                 on:click={() => toggleStoryboardAsset(asset)}
               >
@@ -1210,13 +1255,19 @@
         </div>
 
         <div class="modal-actions">
-          <button class="btn btn-secondary" on:click={cancelStoryboardAssetConfirm}>取消</button>
+          <button class="btn btn-secondary" disabled={storyboardAssetConfirm.phase === 'generating'} on:click={cancelStoryboardAssetConfirm}>
+            {storyboardAssetConfirm.phase === 'failed' ? '关闭' : '取消'}
+          </button>
           <button
             class="btn btn-primary"
-            disabled={pointBalance < storyboardConfirmCost}
+            disabled={pointBalance < storyboardConfirmCost || storyboardAssetConfirm.phase === 'generating'}
             on:click={confirmStoryboardAssetDialog}
           >
-            确认并生成素材
+            {storyboardAssetConfirm.phase === 'generating'
+              ? '生成中...'
+              : storyboardAssetConfirm.phase === 'failed'
+                ? '重试生成'
+                : '确认并生成素材与分镜'}
           </button>
         </div>
       </div>
