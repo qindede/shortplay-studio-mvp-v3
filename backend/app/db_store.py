@@ -267,6 +267,7 @@ def save_data(data: dict[str, Any]) -> None:
                     last_login_at=_dt(item.get("last_login")),
                 )
             )
+        db.flush()
         for item in data.get("projects", []):
             db.add(
                 Project(
@@ -281,6 +282,7 @@ def save_data(data: dict[str, Any]) -> None:
                     updated_at=_dt(item.get("updated_at")),
                 )
             )
+        db.flush()
         for item in data.get("episodes", []):
             db.add(
                 Episode(
@@ -295,6 +297,7 @@ def save_data(data: dict[str, Any]) -> None:
                     updated_at=_dt(item.get("updated_at")),
                 )
             )
+        db.flush()
         for item in data.get("shots", []):
             db.add(
                 Shot(
@@ -311,6 +314,7 @@ def save_data(data: dict[str, Any]) -> None:
                     updated_at=_dt(item.get("updated_at")),
                 )
             )
+        db.flush()
         for item in data.get("assets", []):
             db.add(
                 Asset(
@@ -342,6 +346,7 @@ def save_data(data: dict[str, Any]) -> None:
                         sort_order=index,
                     )
                 )
+        db.flush()
         for item in data.get("ai_jobs", []):
             db.add(
                 AiJob(
@@ -365,6 +370,7 @@ def save_data(data: dict[str, Any]) -> None:
                     completed_at=_dt(item.get("completed_at")),
                 )
             )
+        db.flush()
         for item in data.get("video_tasks", []):
             db.add(
                 VideoTask(

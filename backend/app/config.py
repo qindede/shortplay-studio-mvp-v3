@@ -3,8 +3,14 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 AUTH_SECRET = os.getenv("SHORTPLAY_AUTH_SECRET", "shortplay-mvp-secret")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "")
 

@@ -8,7 +8,8 @@
       "Bash(curl -s \"https://unsplash.com/napi/search/photos?query=chinese+woman+portrait+elegant&per_page=5\" -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0\")",
       "Bash(python -c ' *)",
       "Bash(curl -s \"https://unsplash.com/napi/search/photos?query=chinese+man+suit+portrait&per_page=5\" -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0\")",
-      "Bash(curl -s \"https://unsplash.com/napi/search/photos?query=asian+woman+confident+dramatic+portrait&per_page=5\" -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0\")"
+      "Bash(curl -s \"https://unsplash.com/napi/search/photos?query=asian+woman+confident+dramatic+portrait&per_page=5\" -H \"Accept: application/json\" -H \"User-Agent: Mozilla/5.0\")",
+      "Bash(python -m alembic upgrade head)"
     ]
   }
 }
