@@ -944,6 +944,7 @@
               <PromptOptimizeButton
                 value={newEpisodeScript}
                 context="episode_script"
+                {projectName}
                 onOptimized={(v) => (newEpisodeScript = v)}
               />
             </div>
@@ -1006,6 +1007,7 @@
                 <PromptOptimizeButton
                   value={projectDescription}
                   context="project_description"
+                  {projectName}
                   onOptimized={(v) => (projectDescription = v)}
                 />
               {/if}
@@ -1075,6 +1077,7 @@
     <CreateAssetModal
       show={showCreateAssetModal}
       projectId={currentProject.id}
+      projectName={currentProject?.short_name || ''}
       {pointBalance}
       onCreate={handleAssetCreated}
       onClose={() => (showCreateAssetModal = false)}

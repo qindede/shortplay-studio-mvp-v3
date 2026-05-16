@@ -166,6 +166,7 @@
               <PromptOptimizeButton
                 value={episodeScript}
                 context="episode_script"
+                projectName={currentProject?.short_name || ''}
                 onOptimized={(v) => (episodeScript = v)}
               />
             </div>
@@ -212,6 +213,7 @@
                 <PromptOptimizeButton
                   value={editVisual}
                   context="shot_visual"
+                  projectName={currentProject?.short_name || ''}
                   onOptimized={(v) => (editVisual = v)}
                 />
               </div>

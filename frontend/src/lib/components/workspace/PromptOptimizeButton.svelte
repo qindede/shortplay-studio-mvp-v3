@@ -3,6 +3,7 @@
 
   export let value: string;
   export let context: string = 'general';
+  export let projectName: string = '';
   export let onOptimized: (optimized: string) => void;
 
   let loading = false;
@@ -13,7 +14,7 @@
     loading = true;
     error = '';
     try {
-      const result = await api.optimizePrompt({ prompt: value.trim(), context });
+      const result = await api.optimizePrompt({ prompt: value.trim(), context, projectName: projectName.trim() || undefined });
       onOptimized(result.optimized);
     } catch (e: any) {
       error = e.message || '优化失败';

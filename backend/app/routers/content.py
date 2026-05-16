@@ -159,7 +159,7 @@ def dashboard(user: dict = Depends(get_current_user)):
 @router.post("/optimize-prompt")
 def optimize_prompt_endpoint(payload: PromptOptimizeRequest, user: dict = Depends(get_current_user)):
     try:
-        return {"optimized": ai_llm.optimize_prompt(payload.prompt, payload.context)}
+        return {"optimized": ai_llm.optimize_prompt(payload.prompt, payload.context, payload.project_name)}
     except AIError as exc:
         raise ai_error(exc) from exc
 

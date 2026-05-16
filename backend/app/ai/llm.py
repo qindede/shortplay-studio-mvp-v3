@@ -143,6 +143,7 @@ _OPTIMIZE_DEFAULT = (
 )
 
 
-def optimize_prompt(prompt: str, context: str) -> str:
+def optimize_prompt(prompt: str, context: str, project_name: str = "") -> str:
     system = _OPTIMIZE_SYSTEM.get(context, _OPTIMIZE_DEFAULT)
-    return _chat_text(system, f"原始内容：{prompt}")
+    name_line = f"短剧名称：{project_name}\n" if project_name else ""
+    return _chat_text(system, f"{name_line}原始内容：{prompt}")

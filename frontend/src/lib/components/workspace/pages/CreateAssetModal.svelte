@@ -5,6 +5,7 @@
 
   export let show = false;
   export let projectId: string;
+  export let projectName: string = '';
   export let pointBalance = 0;
   export let onCreate: (asset: Asset) => void;
   export let onClose: () => void;
@@ -310,6 +311,7 @@
               <PromptOptimizeButton
                 value={aiPrompt}
                 context={'asset_' + type}
+                {projectName}
                 onOptimized={(v) => (aiPrompt = v)}
               />
             </div>

@@ -125,6 +125,7 @@ class ShotUpdate(BaseModel):
 class PromptOptimizeRequest(BaseModel):
     prompt: str = Field(min_length=1)
     context: str = Field(default="general", pattern="^(asset_character|asset_scene|asset_image|asset_audio|project_description|episode_script|shot_visual|general)$")
+    project_name: str = Field(default="", max_length=100)
 
 
 class ComposeRequest(BaseModel):

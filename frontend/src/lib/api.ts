@@ -298,7 +298,7 @@ export const api = {
   startVoiceClone: (assetId: string, body: { voice_url?: string; consent: boolean }) =>
     request<Asset>(`/api/assets/${assetId}/voice-clone`, { method: 'POST', body: JSON.stringify(body) }),
   voiceCloneStatus: (assetId: string) => request<Asset>(`/api/assets/${assetId}/voice-clone`),
-  optimizePrompt: (body: { prompt: string; context: string }) =>
+  optimizePrompt: (body: { prompt: string; context: string; projectName?: string }) =>
     request<{ optimized: string }>('/api/optimize-prompt', { method: 'POST', body: JSON.stringify(body) }),
   upload: async (file: File): Promise<{ url: string }> => {
     const form = new FormData();
