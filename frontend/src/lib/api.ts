@@ -120,6 +120,12 @@ export interface WorkspaceBootstrap {
   versions: VideoVersion[];
 }
 
+export interface EpisodeWorkspace {
+  shots: Shot[];
+  video_tasks: VideoTask[];
+  versions: VideoVersion[];
+}
+
 export interface Usage {
   video_total_seconds: number;
   video_used_seconds: number;
@@ -306,6 +312,7 @@ export const api = {
     request<Episode>(`/api/episodes/${episodeId}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteEpisode: (episodeId: string) =>
     request<{ ok: boolean }>(`/api/episodes/${episodeId}`, { method: 'DELETE' }),
+  episodeWorkspace: (episodeId: string) => request<EpisodeWorkspace>(`/api/episodes/${episodeId}/workspace`),
   shots: (episodeId: string) => request<Shot[]>(`/api/episodes/${episodeId}/shots`),
   createShot: (episodeId: string, body: ShotPayload) =>
     request<Shot>(`/api/episodes/${episodeId}/shots`, { method: 'POST', body: JSON.stringify(body) }),

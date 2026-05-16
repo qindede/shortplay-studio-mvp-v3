@@ -436,6 +436,26 @@ def get_episode(episode_id: str, user: dict = Depends(get_current_user)):
     return enrich_episode(data, episode)
 
 
+@router.get("/episodes/{episode_id}/workspace")
+def get_episode_workspace(episode_id: str, user: dict = Depends(get_current_user)):
+    if db_store.enabled():
+        payload = db_store.episode_workspace(user, episode_id)
+        if payload is None:
+            not_found("episode")
+        return payload
+
+    data = snapshot()
+    episode = find_by_id(data["episodes"], episode_id, "episode")
+    verify_project_ownership(data, episode["project_id"], user["id"])
+    shots = [s for s in data["shots"] if s["episode_id"] == episode_id]
+    shots.sort(key=lambda x: x["no"])
+    tasks = [t for t in data["video_tasks"] if t["episode_id"] == episode_id]
+    tasks.sort(key=lambda x: x["updated_at"], reverse=True)
+    versions = [v for v in data["video_versions"] if v["project_id"] == episode["project_id"] and v["episode_id"] == episode_id]
+    versions.sort(key=lambda x: x["created_at"], reverse=True)
+    return {"shots": shots, "video_tasks": tasks, "versions": versions}
+
+
 @router.put("/episodes/{episode_id}")
 def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends(get_current_user)):
     def mutate(data):

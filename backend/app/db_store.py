@@ -480,6 +480,102 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
         }
 
 
+def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
+    if SessionLocal is None:
+        raise RuntimeError("DATABASE_URL is not configured")
+
+    with SessionLocal() as db:
+        row = db.execute(
+            text(
+                """
+                WITH target_episode AS (
+                    SELECT e.id, e.project_id
+                    FROM episodes e
+                    JOIN projects p ON p.id = e.project_id
+                    WHERE e.id = :episode_id
+                      AND p.owner_user_id = :user_id
+                    LIMIT 1
+                )
+                SELECT
+                    (SELECT count(*) FROM target_episode) AS found,
+                    COALESCE((
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'id', s.id,
+                                'episode_id', s.episode_id,
+                                'no', s.no,
+                                'title', s.title,
+                                'visual', COALESCE(s.visual, ''),
+                                'dialogue', COALESCE(s.dialogue, ''),
+                                'characters', s.characters,
+                                'scene', COALESCE(s.scene, ''),
+                                'duration', s.duration,
+                                'status', s.status,
+                                'updated_at', s.updated_at
+                            )
+                            ORDER BY s.no
+                        )
+                        FROM shots s
+                        JOIN target_episode e ON e.id = s.episode_id
+                    ), '[]'::jsonb) AS shots,
+                    COALESCE((
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'id', t.id,
+                                'episode_id', t.episode_id,
+                                'shot_id', t.shot_id,
+                                'ai_job_id', t.ai_job_id,
+                                'title', t.title,
+                                'duration', t.duration,
+                                'progress', t.progress,
+                                'status', t.status,
+                                'provider', t.provider,
+                                'provider_task_id', t.provider_task_id,
+                                'preview_url', t.preview_url,
+                                'video_url', t.video_url,
+                                'error', t.error,
+                                'updated_at', t.updated_at
+                            )
+                            ORDER BY t.updated_at DESC
+                        )
+                        FROM video_tasks t
+                        JOIN target_episode e ON e.id = t.episode_id
+                    ), '[]'::jsonb) AS video_tasks,
+                    COALESCE((
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'id', v.id,
+                                'project_id', v.project_id,
+                                'episode_id', v.episode_id,
+                                'name', v.name,
+                                'description', COALESCE(v.description, ''),
+                                'duration', v.duration,
+                                'ratio', v.ratio,
+                                'status', v.status,
+                                'theme', v.theme,
+                                'preview_url', v.preview_url,
+                                'video_url', v.video_url,
+                                'created_at', v.created_at
+                            )
+                            ORDER BY v.created_at DESC
+                        )
+                        FROM video_versions v
+                        JOIN target_episode e ON e.project_id = v.project_id
+                        WHERE v.episode_id = e.id
+                    ), '[]'::jsonb) AS versions
+                """
+            ),
+            {"episode_id": episode_id, "user_id": user["id"]},
+        ).mappings().one()
+        if int(row["found"] or 0) == 0:
+            return None
+        return {
+            "shots": list(row["shots"] or []),
+            "video_tasks": list(row["video_tasks"] or []),
+            "versions": list(row["versions"] or []),
+        }
+
+
 def _fmt(value: Any) -> str:
     if isinstance(value, datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")

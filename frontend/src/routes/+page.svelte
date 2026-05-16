@@ -451,16 +451,11 @@
   async function selectEpisode(episode: Episode, goScript = false) {
     selectedEpisode = episode;
     fillEpisodeForm(episode);
-    const [shotData, taskData, versionData] = await Promise.all([
-      api.shots(episode.id),
-      api.videoTasks(episode.id),
-      currentProject ? api.versions(currentProject.id, episode.id) : Promise.resolve([])
-    ]);
-    shots = shotData;
-    videoTasks = taskData;
-    versions = versionData;
-
     if (goScript) activePage = 'script';
+    const workspace = await api.episodeWorkspace(episode.id);
+    shots = workspace.shots;
+    videoTasks = workspace.video_tasks;
+    versions = workspace.versions;
   }
 
   async function reloadCurrentProject() {
