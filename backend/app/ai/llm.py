@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -35,6 +36,13 @@ def _chat_json(system: str, user: str) -> Any:
         raise AIOutputSchemaError("LLM did not return valid JSON") from exc
 
 
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _strip_think_tags(text: str) -> str:
+    return _THINK_RE.sub("", text).strip()
+
+
 def _chat_text(system: str, user: str) -> str:
     key = require_key(AI.minimax_api_key, "MINIMAX_API_KEY")
     payload = {
@@ -50,7 +58,8 @@ def _chat_text(system: str, user: str) -> str:
         payload,
         AI.request_timeout,
     )
-    return body.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+    content = body.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+    return _strip_think_tags(content)
 
 
 def generate_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]:
@@ -90,6 +99,6 @@ def generate_storyboard(project: dict, episode: dict, assets: list[dict]) -> lis
 
 def optimize_prompt(prompt: str, context: str) -> str:
     return _chat_text(
-        "你是短剧 AI 生成提示词优化助手。返回优化后的中文提示词，不要解释。",
+        "你是短剧 AI 生成提示词优化助手。只返回优化后的中文提示词原文，禁止添加任何解释、思考过程、标签或前缀。",
         f"场景：{context}\n原始提示词：{prompt}",
     )
