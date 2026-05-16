@@ -6,15 +6,17 @@ from typing import Any
 from fastapi import HTTPException
 
 from . import db_store
-from .config import POINT_RULES, STATUS_LABEL
+from .config import POINT_RULES
 from .security import public_user
 from .services import (
     change_points,
+    comparable_asset_names,
     enrich_episode,
     enrich_project,
     find_by_id,
     get_user_projects,
     get_user_usage,
+    normalize_refs,
     not_found,
     renumber,
     touch_episode_and_project,
@@ -577,9 +579,8 @@ class Storage:
 
     @staticmethod
     def update_asset(user: dict, asset_id: str, payload: Any) -> dict:
-        from . import storage_adapter
         refs_raw = payload.model_dump(exclude_unset=True).get("references")
-        refs = storage_adapter._normalize_refs_static(refs_raw) if refs_raw is not None else None
+        refs = normalize_refs(refs_raw) if refs_raw is not None else None
 
         if db_store.enabled():
             asset = db_store.update_asset(user, asset_id, payload, refs, now())
@@ -771,7 +772,7 @@ class Storage:
                 duplicate = any(
                     existing.get("project_id") == target["project_id"]
                     and existing.get("type") == asset["type"]
-                    and asset["name"] in _comparable_asset_names(existing)
+                    and asset["name"] in comparable_asset_names(existing)
                     for existing in data["assets"]
                 )
                 if duplicate:
@@ -1162,26 +1163,3 @@ class Storage:
             return None
         data = snapshot()
         return next((u for u in data.get("users", []) if u.get("token") == token), None)
-
-
-def _normalize_refs_static(refs: list[dict] | None) -> list[dict]:
-    normalized = []
-    for index, ref in enumerate(refs or [], start=1):
-        normalized.append({
-            "id": ref.get("id") or uid("ref"),
-            "type": ref.get("type", "image"),
-            "name": ref.get("name") or f"参考 {index:02d}",
-            "url": ref.get("url"),
-            "note": ref.get("note"),
-        })
-    return normalized
-
-
-def _comparable_asset_names(asset: dict) -> set[str]:
-    name = (asset.get("name") or "").strip()
-    names = {name}
-    if "：" in name:
-        names.add(name.rsplit("：", 1)[-1].strip())
-    if ":" in name:
-        names.add(name.rsplit(":", 1)[-1].strip())
-    return {item for item in names if item}

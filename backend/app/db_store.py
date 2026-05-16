@@ -3,15 +3,15 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 import json
-import uuid
 from typing import Any
 
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 
-from .config import STATUS_LABEL
+from .config import DEFAULT_USAGE, STATUS_LABEL
 from .db import SessionLocal
 from .security import verify_password
+from .utils import uid
 from .models import (
     AiJob,
     Asset,
@@ -28,10 +28,6 @@ from .models import (
 
 def enabled() -> bool:
     return SessionLocal is not None
-
-
-def uid(prefix: str) -> str:
-    return f"{prefix}_{uuid.uuid4().hex[:10]}"
 
 
 def _user_dict(row: User) -> dict[str, Any]:
@@ -89,20 +85,7 @@ def login_user(username: str, password: str, token: str, last_login: str) -> dic
         user.last_login_at = _dt(last_login)
         db.commit()
         db.refresh(user)
-        row = _user_dict(user)
-        return {
-            "id": row["id"],
-            "username": row["username"],
-            "display_name": row["display_name"],
-            "password_hash": row["password_hash"],
-            "role": row["role"],
-            "status": row["status"],
-            "points": row["points"],
-            "token": row["token"] or "",
-            "usage": row["usage_json"] or {},
-            "created_at": _fmt(row["created_at"]),
-            "last_login": _fmt(row["last_login_at"]),
-        }
+        return _user_dict(user)
 
 
 def register_user(username: str, display_name: str, password_hash: str, token: str, timestamp: str, bonus_points: int = 1000) -> dict[str, Any] | None:
@@ -659,12 +642,8 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
 
     with SessionLocal() as db:
         usage = {**(user.get("usage") or {})}
-        usage.setdefault("video_total_seconds", 2000)
-        usage.setdefault("video_used_seconds", 0)
-        usage.setdefault("image_total", 1000)
-        usage.setdefault("image_used", 0)
-        usage.setdefault("export_total", 164)
-        usage.setdefault("export_used", 0)
+        for _k, _v in DEFAULT_USAGE.items():
+            usage.setdefault(_k, _v)
         row = db.execute(
             text(
                 """
@@ -1115,12 +1094,8 @@ def dashboard(user: dict[str, Any]) -> dict[str, Any]:
 
     with SessionLocal() as db:
         usage = {**(user.get("usage") or {})}
-        usage.setdefault("video_total_seconds", 2000)
-        usage.setdefault("video_used_seconds", 0)
-        usage.setdefault("image_total", 1000)
-        usage.setdefault("image_used", 0)
-        usage.setdefault("export_total", 164)
-        usage.setdefault("export_used", 0)
+        for _k, _v in DEFAULT_USAGE.items():
+            usage.setdefault(_k, _v)
         row = db.execute(
             text(
                 """
@@ -1876,12 +1851,8 @@ def usage(user: dict[str, Any]) -> dict[str, Any]:
     with SessionLocal() as db:
         db_user = db.get(User, user["id"])
         usage_data = dict((db_user.usage_json if db_user else user.get("usage")) or {})
-        usage_data.setdefault("video_total_seconds", 2000)
-        usage_data.setdefault("video_used_seconds", 0)
-        usage_data.setdefault("image_total", 1000)
-        usage_data.setdefault("image_used", 0)
-        usage_data.setdefault("export_total", 164)
-        usage_data.setdefault("export_used", 0)
+        for _k, _v in DEFAULT_USAGE.items():
+            usage_data.setdefault(_k, _v)
         usage_data["team_members"] = db.query(User).filter(User.status == "active").count()
         return usage_data
 
@@ -2128,11 +2099,9 @@ def load_data() -> dict[str, Any]:
             for row in users
         ]
         usage = {
-            "video_total_seconds": 2000,
+            **DEFAULT_USAGE,
             "video_used_seconds": sum((user.usage_json or {}).get("video_used_seconds", 0) for user in users),
-            "image_total": 1000,
             "image_used": sum((user.usage_json or {}).get("image_used", 0) for user in users),
-            "export_total": 164,
             "export_used": sum((user.usage_json or {}).get("export_used", 0) for user in users),
             "team_members": len([user for user in users if user.status == "active"]),
         }

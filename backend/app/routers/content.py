@@ -33,10 +33,9 @@ from ..schemas import (
 )
 from ..security import get_current_user
 from ..services import (
-    add_ai_job,
-    find_by_id,
+    comparable_asset_names,
+    normalize_refs,
     not_found,
-    refund_once,
 )
 from ..storage_adapter import Storage
 from ..store import now, uid
@@ -46,19 +45,6 @@ router = APIRouter(prefix="/api", tags=["content"])
 
 def ai_error(exc: AIError) -> HTTPException:
     return HTTPException(status_code=503, detail=exc.public_message)
-
-
-def normalize_refs(refs: list[dict] | None) -> list[dict]:
-    normalized = []
-    for index, ref in enumerate(refs or [], start=1):
-        normalized.append({
-            "id": ref.get("id") or uid("ref"),
-            "type": ref.get("type", "image"),
-            "name": ref.get("name") or f"参考 {index:02d}",
-            "url": ref.get("url"),
-            "note": ref.get("note"),
-        })
-    return normalized
 
 
 def provider_media_url(url: str | None) -> str | None:
@@ -89,16 +75,6 @@ def find_reference_image(data: dict, shot: dict) -> str | None:
         if media_url:
             return media_url
     return None
-
-
-def comparable_asset_names(asset: dict) -> set[str]:
-    name = (asset.get("name") or "").strip()
-    names = {name}
-    if "：" in name:
-        names.add(name.rsplit("：", 1)[-1].strip())
-    if ":" in name:
-        names.add(name.rsplit(":", 1)[-1].strip())
-    return {item for item in names if item}
 
 
 def storyboard_missing_assets(ai_shots: list[dict], assets: list[dict]) -> list[dict]:

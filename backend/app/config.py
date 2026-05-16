@@ -52,6 +52,15 @@ POINT_RULES = {
     "voice_clone": 50,
 }
 
+DEFAULT_USAGE = {
+    "video_total_seconds": 2000,
+    "video_used_seconds": 0,
+    "image_total": 1000,
+    "image_used": 0,
+    "export_total": 164,
+    "export_used": 0,
+}
+
 STATUS_LABEL = {
     "active": "制作中",
     "review": "待审核",

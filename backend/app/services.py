@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-from .config import POINT_RULES, STATUS_LABEL
+from .config import DEFAULT_USAGE, POINT_RULES, STATUS_LABEL
 from .schemas import EpisodeDraft, OutlineGenerateRequest
 from .security import public_user
 from .store import now, uid
+
+
+def ensure_usage_defaults(usage: dict) -> dict:
+    for key, value in DEFAULT_USAGE.items():
+        usage.setdefault(key, value)
+    return usage
 
 
 def not_found(name: str):
@@ -62,14 +68,7 @@ def verify_project_ownership(data: dict, project_id: str, user_id: str) -> dict:
 def get_user_usage(data: dict, user_id: str) -> dict:
     user = user_in_data(data, user_id)
     user.setdefault("usage", {})
-    usage = user["usage"]
-    usage.setdefault("video_total_seconds", 2000)
-    usage.setdefault("video_used_seconds", 0)
-    usage.setdefault("image_total", 1000)
-    usage.setdefault("image_used", 0)
-    usage.setdefault("export_total", 164)
-    usage.setdefault("export_used", 0)
-    return usage
+    return ensure_usage_defaults(user["usage"])
 
 
 def enrich_project(data: dict, project: dict) -> dict:
@@ -338,3 +337,26 @@ def optimize_prompt(prompt: str, context: str) -> str:
     if len(text) < 30:
         return f"{text}，画面精细度高，色调统一，构图讲究，超高清渲染，专业美术品质"
     return text
+
+
+def comparable_asset_names(asset: dict) -> set[str]:
+    name = (asset.get("name") or "").strip()
+    names = {name}
+    if "：" in name:
+        names.add(name.rsplit("：", 1)[-1].strip())
+    if ":" in name:
+        names.add(name.rsplit(":", 1)[-1].strip())
+    return {item for item in names if item}
+
+
+def normalize_refs(refs: list[dict] | None) -> list[dict]:
+    normalized = []
+    for index, ref in enumerate(refs or [], start=1):
+        normalized.append({
+            "id": ref.get("id") or uid("ref"),
+            "type": ref.get("type", "image"),
+            "name": ref.get("name") or f"参考 {index:02d}",
+            "url": ref.get("url"),
+            "note": ref.get("note"),
+        })
+    return normalized
