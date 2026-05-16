@@ -26,6 +26,7 @@ class AISettings:
     ark_video_model: str = os.getenv("ARK_VIDEO_MODEL", "doubao-seedance-1-0-pro-fast-251015")
     volc_voice_api_key: str = os.getenv("VOLC_VOICE_API_KEY", "")
     request_timeout: float = float(os.getenv("AI_REQUEST_TIMEOUT", "120"))
+    generation_timeout: float = float(os.getenv("AI_GENERATION_TIMEOUT", "300"))
 
 
 @dataclass(frozen=True)

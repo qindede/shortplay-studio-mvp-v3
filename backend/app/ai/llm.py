@@ -39,7 +39,7 @@ def _extract_json(text: str) -> str:
     return text
 
 
-def _chat_json(system: str, user: str) -> Any:
+def _chat_json(system: str, user: str, timeout: float | None = None) -> Any:
     key = require_key(AI.minimax_api_key, "MINIMAX_API_KEY")
     payload = {
         "model": AI.minimax_text_model,
@@ -53,7 +53,7 @@ def _chat_json(system: str, user: str) -> Any:
         f"{AI.minimax_base_url.rstrip('/')}/chat/completions",
         {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         payload,
-        AI.request_timeout,
+        timeout or AI.request_timeout,
     )
     raw = body.get("choices", [{}])[0].get("message", {}).get("content", "")
     content = _extract_json(raw)
@@ -63,7 +63,7 @@ def _chat_json(system: str, user: str) -> Any:
         raise AIOutputSchemaError("LLM did not return valid JSON") from exc
 
 
-def _chat_text(system: str, user: str) -> str:
+def _chat_text(system: str, user: str, timeout: float | None = None) -> str:
     key = require_key(AI.minimax_api_key, "MINIMAX_API_KEY")
     payload = {
         "model": AI.minimax_text_model,
@@ -76,7 +76,7 @@ def _chat_text(system: str, user: str) -> str:
         f"{AI.minimax_base_url.rstrip('/')}/chat/completions",
         {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         payload,
-        AI.request_timeout,
+        timeout or AI.request_timeout,
     )
     content = body.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
     return _strip_think_tags(content)
@@ -96,6 +96,7 @@ def generate_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]:
             f"为短剧《{payload.name}》生成 {payload.episode_count} 集大纲。"
             f"设定：{payload.description}。"
         ),
+        timeout=AI.generation_timeout,
     )
     try:
         result = OutlineResult.model_validate(data)
@@ -123,6 +124,7 @@ def generate_storyboard(project: dict, episode: dict, assets: list[dict]) -> lis
             f"可用素材：\n{asset_text}\n"
             f"生成 {len(assets)} 个竖屏短剧分镜镜头。"
         ),
+        timeout=AI.generation_timeout,
     )
     try:
         result = StoryboardResult.model_validate(data)
