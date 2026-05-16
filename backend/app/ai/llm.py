@@ -13,6 +13,32 @@ from .errors import AIOutputSchemaError
 from .schemas import OutlineResult, StoryboardResult
 
 
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+_FENCE_RE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
+
+
+def _strip_think_tags(text: str) -> str:
+    return _THINK_RE.sub("", text).strip()
+
+
+def _extract_json(text: str) -> str:
+    """Strip think tags and markdown fences, then locate the first JSON object/array."""
+    text = _strip_think_tags(text)
+    m = _FENCE_RE.search(text)
+    if m:
+        text = m.group(1).strip()
+    start = None
+    end = None
+    for i, ch in enumerate(text):
+        if ch in "{[" and start is None:
+            start = i
+        if ch in "}]":
+            end = i
+    if start is not None and end is not None:
+        return text[start : end + 1]
+    return text
+
+
 def _chat_json(system: str, user: str) -> Any:
     key = require_key(AI.minimax_api_key, "MINIMAX_API_KEY")
     payload = {
@@ -29,18 +55,12 @@ def _chat_json(system: str, user: str) -> Any:
         payload,
         AI.request_timeout,
     )
-    content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+    raw = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+    content = _extract_json(raw)
     try:
         return json.loads(content)
     except json.JSONDecodeError as exc:
         raise AIOutputSchemaError("LLM did not return valid JSON") from exc
-
-
-_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
-
-
-def _strip_think_tags(text: str) -> str:
-    return _THINK_RE.sub("", text).strip()
 
 
 def _chat_text(system: str, user: str) -> str:
@@ -64,10 +84,17 @@ def _chat_text(system: str, user: str) -> str:
 
 def generate_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]:
     data = _chat_json(
-        "你是短剧编剧。只返回 JSON，格式为 {\"episodes\": [...] }。",
+        (
+            "你是短剧编剧。只返回 JSON，不要输出任何其他文字。\n"
+            "严格按以下格式返回：\n"
+            '{"episodes": [\n'
+            '  {"title": "集标题", "summary": "剧情摘要", "script": "剧本正文", "duration_target": 30}\n'
+            "]}\n"
+            "字段说明：title(字符串,必填), summary(字符串), script(字符串), duration_target(整数,秒)。"
+        ),
         (
             f"为短剧《{payload.name}》生成 {payload.episode_count} 集大纲。"
-            f"设定：{payload.description}。每集包含 title、summary、script、duration_target。"
+            f"设定：{payload.description}。"
         ),
     )
     try:
@@ -80,14 +107,21 @@ def generate_outline(payload: OutlineGenerateRequest) -> list[EpisodeDraft]:
 def generate_storyboard(project: dict, episode: dict, assets: list[dict]) -> list[dict]:
     asset_text = "\n".join(f"- {a.get('type')}: {a.get('name')} {a.get('description', '')}" for a in assets[:20])
     data = _chat_json(
-        "你是短剧分镜师。只返回 JSON，格式为 {\"shots\": [...] }。",
+        (
+            "你是短剧分镜师。只返回 JSON，不要输出任何其他文字。\n"
+            "严格按以下格式返回：\n"
+            '{"shots": [\n'
+            '  {"title": "镜头标题", "visual": "画面描述", "dialogue": "台词", "characters": ["角色名"], "scene": "场景", "duration": 3}\n'
+            "]}\n"
+            "字段说明：title(字符串,必填), visual(字符串), dialogue(字符串), characters(字符串数组), scene(字符串), duration(整数,秒)。"
+        ),
         (
             f"项目：{project.get('name')}\n"
             f"剧集：{episode.get('title')}\n"
             f"剧情摘要：{episode.get('summary')}\n"
             f"剧本：{episode.get('script')}\n"
             f"可用素材：\n{asset_text}\n"
-            "生成竖屏短剧分镜。每个镜头包含 title、visual、dialogue、characters、scene、duration。"
+            f"生成 {len(assets)} 个竖屏短剧分镜镜头。"
         ),
     )
     try:
@@ -142,8 +176,14 @@ _OPTIMIZE_DEFAULT = (
     "只返回优化后的原文，禁止添加任何解释、思考过程、标签或前缀。"
 )
 
+_OPTIMIZE_NAME_SUFFIX = (
+    "以下是短剧《{name}》的相关内容，优化时必须紧扣该剧的名称、题材和风格，"
+    "确保输出内容与剧名高度相关，不要偏离该剧的故事方向。"
+)
+
 
 def optimize_prompt(prompt: str, context: str, project_name: str = "") -> str:
     system = _OPTIMIZE_SYSTEM.get(context, _OPTIMIZE_DEFAULT)
-    name_line = f"短剧名称：{project_name}\n" if project_name else ""
-    return _chat_text(system, f"{name_line}原始内容：{prompt}")
+    if project_name:
+        system += _OPTIMIZE_NAME_SUFFIX.format(name=project_name)
+    return _chat_text(system, f"原始内容：{prompt}")

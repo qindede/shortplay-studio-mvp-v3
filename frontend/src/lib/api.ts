@@ -31,15 +31,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     let message = `Request failed: ${response.status}`;
     try {
-      const body = await response.json();
-      if (Array.isArray(body.detail)) {
-        message = body.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ');
-      } else if (typeof body.detail === 'string') {
-        message = body.detail;
+      const text = await response.text();
+      try {
+        const body = JSON.parse(text);
+        if (Array.isArray(body.detail)) {
+          message = body.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ');
+        } else if (typeof body.detail === 'string') {
+          message = body.detail;
+        }
+      } catch {
+        message = text || message;
       }
     } catch {
-      const text = await response.text();
-      message = text || message;
+      // body unreadable, keep default message
     }
     throw new Error(message);
   }
