@@ -8,8 +8,8 @@ This file gives coding agents the working rules for this repository.
 
 - Frontend: SvelteKit, Svelte 5, TypeScript, Vite, pnpm
 - Backend: FastAPI, Pydantic, Uvicorn
-- Data store: JSON files under `backend/data`
-- Uploads: local files under `backend/uploads`
+- Data store: PostgreSQL via SQLAlchemy 2.x + Alembic migrations
+- Uploads: Cloudflare R2 object storage (proxied via backend `/uploads` route)
 - Main user workspace: `/`
 - Admin console: `/admin`
 
@@ -54,9 +54,9 @@ Default accounts documented by the project:
 - `backend/app/main.py`: FastAPI app setup, CORS, router registration, uploads mount.
 - `backend/app/routers/`: API route modules grouped by domain.
 - `backend/app/schemas.py`: API data shapes.
-- `backend/app/db_store.py`: PostgreSQL persistence layer (SQLAlchemy ORM).
+- `backend/app/db_store.py`: PostgreSQL persistence layer (SQLAlchemy ORM, decorated with `@require_db`).
 - `backend/app/storage_adapter.py`: thin facade over db_store with consistent error handling.
-- `backend/app/services.py`: business logic shared by routers.
+- `backend/app/utils.py`: shared utilities (ID generation, datetime parsing/formatting, user dict normalization, DB URL fixup, asset name matching, reference normalization).
 - `backend/app/security.py`: auth and current-user helpers.
 - `frontend/src/lib/api.ts`: frontend API client and shared TypeScript types.
 - `frontend/src/routes/+page.svelte`: main user workspace route.
@@ -98,7 +98,7 @@ Follow KISS: keep code simple, direct, efficient, and easy to maintain.
 
 - Use FastAPI routers by domain.
 - Keep request and response models in `schemas.py` when they are shared or part of the API contract.
-- Keep persistence changes compatible with the JSON store unless the task explicitly migrates storage.
+- Use SQLAlchemy ORM for all persistence; shared utility functions live in `utils.py`.
 - Do not write uploaded files outside `backend/uploads`.
 - Validate ownership and permissions before returning or mutating user-owned resources.
 - Keep admin-only operations behind the existing admin checks.
@@ -106,8 +106,8 @@ Follow KISS: keep code simple, direct, efficient, and easy to maintain.
 
 ## Data And File Safety
 
-- Treat `backend/data/db.json` as development data. Avoid destructive rewrites unless asked.
-- Do not delete or replace files in `backend/uploads` unless the task explicitly requires it.
+- Seed data lives in `backend/app/seed_data.py`; destructive database rewrites require explicit approval.
+- Do not delete or replace files in R2 storage unless the task explicitly requires it.
 - Avoid committing generated caches such as `.svelte-kit`, `node_modules`, `.venv`, or build output.
 - Preserve existing user edits in the worktree. Do not reset or revert unrelated changes.
 - Use UTF-8 for new text files. Be careful with existing mojibake or encoded Chinese strings; do not rewrite large text blocks only to change encoding unless requested.
