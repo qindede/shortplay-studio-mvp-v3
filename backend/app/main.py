@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException, Response
 
 from .routers import admin, auth, content, upload
 from . import storage
+from .ai.client import close_client
 
-app = FastAPI(title="Muran API", version="0.3.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    close_client()
+
+
+app = FastAPI(title="Muran API", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

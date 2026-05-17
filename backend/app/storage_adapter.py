@@ -289,13 +289,11 @@ class Storage:
 
     @staticmethod
     def batch_create_video_tasks(user: dict, episode_id: str, provider_tasks: dict[str, str], cost_per_second: int) -> list[dict]:
-        tasks = []
-        for shot_id, provider_task_id in provider_tasks.items():
-            task = db_store.create_video_task(user, shot_id, provider_task_id, cost_per_second, now())
-            if isinstance(task, dict) and task.get("error") == "insufficient_points":
-                raise HTTPException(status_code=402, detail="积分不足")
-            if task:
-                tasks.append(task)
+        tasks, error = db_store.batch_create_video_tasks(user, provider_tasks, cost_per_second, now())
+        if error == "insufficient_points":
+            raise HTTPException(status_code=402, detail="积分不足")
+        if error:
+            raise HTTPException(status_code=400, detail=error)
         return tasks
 
     @staticmethod

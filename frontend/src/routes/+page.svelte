@@ -631,7 +631,6 @@
         duration_target: Math.max(1, Number(episodeDuration) || 30)
       });
 
-      episodes = await api.episodes(project.id);
       await selectEpisode(episode, true);
 
       if (generateStoryboard) {
@@ -639,8 +638,7 @@
         await generateStoryboardWithAssetCheck(episode.id);
       }
 
-      await refreshDashboard();
-      await reloadCurrentProject();
+      await Promise.all([refreshDashboard(), reloadCurrentProject()]);
       episodeDialogOpen = false;
       resetNewEpisodeForm();
       activePage = 'script';

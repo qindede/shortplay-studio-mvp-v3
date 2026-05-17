@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 from typing import Annotated
 
 import bcrypt
 from fastapi import Depends, Header, HTTPException
 
-from .config import AUTH_SECRET
 from .utils import public_user_dict
+
+public_user = public_user_dict
 
 
 def hash_password(password: str) -> str:
@@ -15,10 +15,7 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    if password_hash.startswith("$2b$") or password_hash.startswith("$2a$"):
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
-    legacy = hashlib.sha256(f"{AUTH_SECRET}:{password}".encode("utf-8")).hexdigest()
-    return legacy == password_hash
+    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
 def get_current_user(x_user_token: Annotated[str | None, Header(alias="X-User-Token")] = None) -> dict:

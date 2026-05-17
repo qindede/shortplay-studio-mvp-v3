@@ -10,7 +10,6 @@ from .utils import fix_database_url
 
 load_dotenv()
 
-AUTH_SECRET = os.getenv("SHORTPLAY_AUTH_SECRET", "shortplay-mvp-secret")
 DATABASE_URL = fix_database_url(os.getenv("DATABASE_URL", ""))
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "")

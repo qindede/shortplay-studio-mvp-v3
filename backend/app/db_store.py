@@ -22,6 +22,17 @@ from sqlalchemy.exc import IntegrityError
 from .config import DEFAULT_USAGE, STATUS_LABEL, apply_usage_defaults
 from .db import SessionLocal
 from .security import verify_password
+from .serializers import (
+    _ai_job_dict,
+    _asset_dict,
+    _episode_dict,
+    _ledger_dict,
+    _project_dict,
+    _shot_dict,
+    _user_dict,
+    _video_task_dict,
+    _video_version_dict,
+)
 from .utils import uid, fmt_dt, parse_dt, public_user_dict
 from .models import (
     AiJob,
@@ -39,22 +50,6 @@ from .models import (
 
 def enabled() -> bool:
     return SessionLocal is not None
-
-
-def _user_dict(row: User) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "username": row.username,
-        "display_name": row.display_name,
-        "password_hash": row.password_hash,
-        "role": row.role,
-        "status": row.status,
-        "points": row.points,
-        "token": row.token or "",
-        "usage": row.usage_json or {},
-        "created_at": fmt_dt(row.created_at),
-        "last_login": fmt_dt(row.last_login_at),
-    }
 
 
 @require_db
@@ -239,134 +234,8 @@ def admin_point_ledger(user_id: str | None = None) -> list[dict[str, Any]]:
 
 
 
-def _ledger_dict(row: PointLedger, user: User | dict[str, Any]) -> dict[str, Any]:
-    username = user.get("username", "") if isinstance(user, dict) else user.username
-    display_name = user.get("display_name", "") if isinstance(user, dict) else user.display_name
-    return {
-        "id": row.id,
-        "user_id": row.user_id,
-        "username": username,
-        "display_name": display_name,
-        "amount": row.amount,
-        "type": row.type,
-        "scene": row.scene,
-        "description": row.description or "",
-        "balance_after": row.balance_after,
-        "ai_job_id": row.ai_job_id,
-        "created_at": fmt_dt(row.created_at),
-    }
-
-
-def _project_dict(row: Project, episode_count: int = 0, asset_count: int = 0, version_count: int = 0) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "owner_user_id": row.owner_user_id,
-        "owner": "",
-        "name": row.name,
-        "short_name": row.short_name,
-        "description": row.description or "",
-        "status": row.status,
-        "status_label": STATUS_LABEL.get(row.status, row.status),
-        "cover": row.cover,
-        "cover_image": row.cover_image_url,
-        "updated_at": fmt_dt(row.updated_at),
-        "episode_count": episode_count,
-        "asset_count": asset_count,
-        "version_count": version_count,
-    }
-
-
-def _episode_dict(row: Episode, shot_count: int = 0, version_count: int = 0) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "project_id": row.project_id,
-        "no": row.no,
-        "title": row.title,
-        "summary": row.summary or "",
-        "script": row.script or "",
-        "duration_target": row.duration_target,
-        "status": row.status,
-        "status_label": STATUS_LABEL.get(row.status, row.status),
-        "updated_at": fmt_dt(row.updated_at),
-        "shot_count": shot_count,
-        "version_count": version_count,
-    }
-
-
-def _shot_dict(row: Shot) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "episode_id": row.episode_id,
-        "no": row.no,
-        "title": row.title,
-        "visual": row.visual or "",
-        "dialogue": row.dialogue or "",
-        "characters": row.characters or [],
-        "scene": row.scene or "",
-        "duration": row.duration,
-        "status": row.status,
-        "updated_at": fmt_dt(row.updated_at),
-    }
-
-
-def _asset_dict(row: Asset, refs: list[dict] | None = None) -> dict[str, Any]:
-    references = refs or []
-    return {
-        "id": row.id,
-        "project_id": row.project_id,
-        "type": row.type,
-        "name": row.name,
-        "description": row.description or "",
-        "ref_count": len(references),
-        "initial": row.initial or row.name[:1],
-        "image": row.image_url,
-        "voice": row.voice_label,
-        "voice_url": row.voice_url,
-        "speaker_id": row.speaker_id,
-        "voice_status": row.voice_status,
-        "references": references,
-        "updated_at": fmt_dt(row.updated_at),
-    }
-
-
-def _video_task_dict(row: VideoTask) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "episode_id": row.episode_id,
-        "shot_id": row.shot_id,
-        "ai_job_id": row.ai_job_id,
-        "title": row.title,
-        "duration": row.duration,
-        "progress": row.progress,
-        "status": row.status,
-        "provider": row.provider,
-        "provider_task_id": row.provider_task_id,
-        "preview_url": row.preview_url,
-        "video_url": row.video_url,
-        "error": row.error,
-        "updated_at": fmt_dt(row.updated_at),
-    }
-
-
-def _video_version_dict(row: VideoVersion) -> dict[str, Any]:
-    return {
-        "id": row.id,
-        "project_id": row.project_id,
-        "episode_id": row.episode_id,
-        "name": row.name,
-        "description": row.description or "",
-        "duration": row.duration,
-        "ratio": row.ratio,
-        "status": row.status,
-        "theme": row.theme,
-        "preview_url": row.preview_url,
-        "video_url": row.video_url,
-        "created_at": fmt_dt(row.created_at),
-    }
-
-
 def _change_points(db, user_id: str, amount: int, kind: str, scene: str, description: str, timestamp: datetime | None) -> PointLedger:
-    user = db.get(User, user_id)
+    user = db.execute(select(User).where(User.id == user_id).with_for_update()).scalar_one_or_none()
     if not user:
         raise ValueError("missing_user")
     current = int(user.points or 0)
@@ -457,7 +326,13 @@ def episode_generation_context(user: dict[str, Any], episode_id: str) -> dict[st
         if not episode:
             return None
         project = db.get(Project, episode.project_id)
-        assets = list_assets(user, episode.project_id) or []
+        asset_rows = list(db.scalars(select(Asset).where(Asset.project_id == episode.project_id)))
+        refs_by_asset: dict[str, list[dict]] = defaultdict(list)
+        asset_ids = [a.id for a in asset_rows]
+        if asset_ids:
+            for ref in db.scalars(select(AssetReference).where(AssetReference.asset_id.in_(asset_ids)).order_by(AssetReference.sort_order)):
+                refs_by_asset[ref.asset_id].append({"id": ref.id, "type": ref.type, "name": ref.name, "url": ref.url, "note": ref.note})
+        assets = [_asset_dict(a, refs_by_asset.get(a.id, [])) for a in asset_rows]
         shots = [_shot_dict(shot) for shot in db.scalars(select(Shot).where(Shot.episode_id == episode_id).order_by(Shot.no))]
         return {
             "project": _project_dict(project) | {"owner": user.get("display_name", "")},
@@ -564,7 +439,16 @@ def shot_generation_context(user: dict[str, Any], shot_id: str) -> dict[str, Any
             return None
         episode = db.get(Episode, shot.episode_id)
         project = db.get(Project, episode.project_id) if episode else None
-        assets = list_assets(user, episode.project_id) if episode else []
+        if episode:
+            asset_rows = list(db.scalars(select(Asset).where(Asset.project_id == episode.project_id)))
+            refs_by_asset: dict[str, list[dict]] = defaultdict(list)
+            asset_ids = [a.id for a in asset_rows]
+            if asset_ids:
+                for ref in db.scalars(select(AssetReference).where(AssetReference.asset_id.in_(asset_ids)).order_by(AssetReference.sort_order)):
+                    refs_by_asset[ref.asset_id].append({"id": ref.id, "type": ref.type, "name": ref.name, "url": ref.url, "note": ref.note})
+            assets = [_asset_dict(a, refs_by_asset.get(a.id, [])) for a in asset_rows]
+        else:
+            assets = []
         return {
             "shot": _shot_dict(shot),
             "episode": _episode_dict(episode) if episode else None,
@@ -616,6 +500,60 @@ def create_video_task(user: dict[str, Any], shot_id: str, provider_task_id: str,
                 project.updated_at = ts
         db.commit()
         return _video_task_dict(task)
+
+
+@require_db
+def batch_create_video_tasks(user: dict[str, Any], provider_tasks: dict[str, str], cost_per_second: int, timestamp: str) -> tuple[list[dict], str | None]:
+    """Create multiple video tasks in a single transaction.
+
+    Returns (tasks, error). If any shot fails due to insufficient points,
+    returns the error string and no tasks are created.
+    """
+    ts = parse_dt(timestamp)
+    with SessionLocal() as db:
+        tasks = []
+        for shot_id, provider_task_id in provider_tasks.items():
+            shot = db.scalar(
+                select(Shot)
+                .join(Episode, Episode.id == Shot.episode_id)
+                .join(Project, Project.id == Episode.project_id)
+                .where(Shot.id == shot_id, Project.owner_user_id == user["id"])
+            )
+            if not shot:
+                continue
+            episode = db.get(Episode, shot.episode_id)
+            duration = max(1, int(shot.duration))
+            cost = duration * cost_per_second
+            try:
+                _change_points(db, user["id"], -cost, "consume", "生成镜头视频", f"生成镜头 #{shot.no}《{shot.title}》，{duration}s", ts)
+            except ValueError as exc:
+                db.rollback()
+                return [], str(exc)
+            job = _add_ai_job(db, user["id"], "video_shot", "seedance", cost, ts, status="running", progress=0, provider_task_id=provider_task_id, episode_id=shot.episode_id, shot_id=shot.id, project_id=episode.project_id if episode else None)
+            db.flush()
+            task = db.scalar(select(VideoTask).where(VideoTask.shot_id == shot.id))
+            if not task:
+                task = VideoTask(id=uid("task"), episode_id=shot.episode_id, shot_id=shot.id, duration=duration, title=shot.title, progress=0, status="generating", updated_at=ts)
+                db.add(task)
+            task.title = shot.title
+            task.duration = duration
+            task.progress = 0
+            task.status = "generating"
+            task.provider = "seedance"
+            task.provider_task_id = provider_task_id
+            task.ai_job_id = job.id
+            task.error = None
+            task.updated_at = ts
+            shot.status = "generating"
+            shot.updated_at = ts
+            if episode:
+                episode.updated_at = ts
+                project = db.get(Project, episode.project_id)
+                if project:
+                    project.updated_at = ts
+            tasks.append(task)
+        db.commit()
+        return [_video_task_dict(t) for t in tasks], None
 
 
 @require_db
@@ -1552,55 +1490,91 @@ def delete_shot(user: dict[str, Any], shot_id: str, timestamp: str) -> bool:
 
 
 @require_db
+def _create_asset_common(
+    db: Any,
+    user_id: str,
+    project_id: str,
+    payload: Any,
+    refs: list[dict],
+    cost: int,
+    ts: datetime,
+    points_scene: str,
+    points_desc: str,
+    image_url: str | None,
+    initial: str | None,
+    voice_label: str | None,
+    voice_url: str | None,
+    voice_status: str | None,
+) -> tuple[Asset, list[dict]] | dict[str, Any] | None:
+    """Shared logic for create_asset and generate_asset."""
+    project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user_id))
+    target_user = db.get(User, user_id)
+    if not project or not target_user:
+        return None
+    try:
+        _change_points(db, user_id, -cost, "consume", points_scene, points_desc, ts)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    asset = Asset(
+        id=uid("asset"),
+        project_id=project_id,
+        type=payload.type,
+        name=payload.name,
+        description=payload.description,
+        initial=initial or payload.name[:1],
+        image_url=image_url,
+        voice_label=voice_label,
+        voice_url=voice_url,
+        voice_status=voice_status,
+        provider_meta={},
+        updated_at=ts,
+    )
+    db.add(asset)
+    db.flush()
+    for index, ref in enumerate(refs):
+        db.add(
+            AssetReference(
+                id=ref.get("id") or uid("ref"),
+                asset_id=asset.id,
+                type=ref.get("type", "image"),
+                name=ref.get("name") or f"参考 {index + 1}",
+                url=ref.get("url"),
+                note=ref.get("note"),
+                sort_order=index,
+            )
+        )
+    visual_asset = payload.type in {"character", "scene", "image"}
+    if visual_asset:
+        usage = dict(target_user.usage_json or {})
+        usage.setdefault("image_total", 1000)
+        usage.setdefault("image_used", 0)
+        usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
+        target_user.usage_json = usage
+    project.updated_at = ts
+    return asset, refs
+
+
+@require_db
 def create_asset(user: dict[str, Any], project_id: str, payload: Any, refs: list[dict], cost: int, timestamp: str) -> dict[str, Any] | None:
     ts = parse_dt(timestamp)
-    visual_asset = payload.type in {"character", "scene", "image"}
     with SessionLocal() as db:
-        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
-        target_user = db.get(User, user["id"])
-        if not project or not target_user:
-            return None
-        try:
-            _change_points(db, user["id"], -cost, "consume", "创建素材", f"创建素材《{payload.name}》", ts)
-        except ValueError as exc:
-            return {"error": str(exc)}
-        asset = Asset(
-            id=uid("asset"),
-            project_id=project_id,
-            type=payload.type,
-            name=payload.name,
-            description=payload.description,
-            initial=(payload.initial[:1] or payload.name[:1]),
+        result = _create_asset_common(
+            db, user["id"], project_id, payload, refs, cost, ts,
+            points_scene="创建素材",
+            points_desc=f"创建素材《{payload.name}》",
             image_url=payload.image,
+            initial=payload.initial[:1] if payload.initial else None,
             voice_label=payload.voice,
             voice_url=payload.voice_url,
             voice_status="uploaded" if payload.voice_url else None,
-            provider_meta={},
-            updated_at=ts,
         )
-        db.add(asset)
-        db.flush()
-        for index, ref in enumerate(refs):
-            db.add(
-                AssetReference(
-                    id=ref.get("id") or uid("ref"),
-                    asset_id=asset.id,
-                    type=ref.get("type", "image"),
-                    name=ref.get("name") or f"参考 {index + 1}",
-                    url=ref.get("url"),
-                    note=ref.get("note"),
-                    sort_order=index,
-                )
-            )
-        if visual_asset:
-            usage = dict(target_user.usage_json or {})
-            usage.setdefault("image_total", 1000)
-            usage.setdefault("image_used", 0)
-            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
-            target_user.usage_json = usage
-        project.updated_at = ts
+        if result is None:
+            return None
+        if isinstance(result, dict):
+            return result
+        asset, asset_refs = result
         db.commit()
-        return _asset_dict(asset, refs)
+        return _asset_dict(asset, asset_refs)
 
 
 @require_db
@@ -1608,41 +1582,24 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any, generate
     ts = parse_dt(timestamp)
     visual_asset = payload.type in {"character", "scene", "image"}
     with SessionLocal() as db:
-        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
-        target_user = db.get(User, user["id"])
-        if not project or not target_user:
-            return None
-        try:
-            _change_points(db, user["id"], -cost, "consume", "AI 生成素材", f"AI 生成素材《{payload.name}》", ts)
-        except ValueError as exc:
-            return {"error": str(exc)}
-        asset = Asset(
-            id=uid("asset"),
-            project_id=project_id,
-            type=payload.type,
-            name=payload.name,
-            description=payload.description,
-            initial=payload.name[:1],
+        result = _create_asset_common(
+            db, user["id"], project_id, payload, refs, cost, ts,
+            points_scene="AI 生成素材",
+            points_desc=f"AI 生成素材《{payload.name}》",
             image_url=generated_url,
+            initial=None,
             voice_label=None,
             voice_url=None,
-            provider_meta={},
-            updated_at=ts,
+            voice_status=None,
         )
-        db.add(asset)
-        db.flush()
-        for index, ref in enumerate(refs):
-            db.add(AssetReference(id=ref.get("id") or uid("ref"), asset_id=asset.id, type=ref.get("type", "image"), name=ref.get("name", f"参考 {index + 1}"), url=ref.get("url"), note=ref.get("note"), sort_order=index))
+        if result is None:
+            return None
+        if isinstance(result, dict):
+            return result
+        asset, asset_refs = result
         _add_ai_job(db, user["id"], "image_asset" if visual_asset else "audio_asset", provider, cost, ts, project_id=project_id, asset_id=asset.id)
-        if visual_asset:
-            usage = dict(target_user.usage_json or {})
-            usage.setdefault("image_total", 1000)
-            usage.setdefault("image_used", 0)
-            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
-            target_user.usage_json = usage
-        project.updated_at = ts
         db.commit()
-        return _asset_dict(asset, refs)
+        return _asset_dict(asset, asset_refs)
 
 
 @require_db
@@ -1873,30 +1830,6 @@ def list_project_ai_jobs(user: dict[str, Any], project_id: str) -> list[dict[str
         return [_ai_job_dict(job) for job in jobs]
 
 
-def _ai_job_dict(job: AiJob) -> dict[str, Any]:
-    return {
-        "id": job.id,
-        "user_id": job.user_id,
-        "project_id": job.project_id,
-        "episode_id": job.episode_id,
-        "shot_id": job.shot_id,
-        "asset_id": job.asset_id,
-        "type": job.type,
-        "provider": job.provider,
-        "provider_task_id": job.provider_task_id,
-        "status": job.status,
-        "progress": job.progress,
-        "input_json": job.input_json or {},
-        "output_json": job.output_json or {},
-        "error": job.error,
-        "cost_points": job.cost_points,
-        "created_at": fmt_dt(job.created_at),
-        "updated_at": fmt_dt(job.updated_at),
-        "completed_at": fmt_dt(job.completed_at),
-    }
-
-
-
 @require_db
 def _ensure_seed_data() -> None:
     """Create default users and load seed data if the database is empty."""
@@ -1918,381 +1851,5 @@ def _ensure_seed_data() -> None:
                 usage_json={}, created_at=ts, last_login_at=None,
             ))
         db.commit()
+    from .data_io import save_data
     save_data(seed_data())
-
-
-@require_db
-def load_data() -> dict[str, Any]:
-    _ensure_seed_data()
-    with SessionLocal() as db:
-        users = list(db.scalars(select(User)))
-        user_by_id = {user.id: user for user in users}
-
-        projects = [
-            {
-                "id": row.id,
-                "owner_user_id": row.owner_user_id,
-                "owner": user_by_id.get(row.owner_user_id).display_name if user_by_id.get(row.owner_user_id) else "",
-                "name": row.name,
-                "short_name": row.short_name,
-                "description": row.description or "",
-                "status": row.status,
-                "cover": row.cover,
-                "cover_image": row.cover_image_url,
-                "updated_at": fmt_dt(row.updated_at),
-            }
-            for row in db.scalars(select(Project))
-        ]
-        episodes = [
-            {
-                "id": row.id,
-                "project_id": row.project_id,
-                "no": row.no,
-                "title": row.title,
-                "summary": row.summary or "",
-                "script": row.script or "",
-                "duration_target": row.duration_target,
-                "status": row.status,
-                "updated_at": fmt_dt(row.updated_at),
-            }
-            for row in db.scalars(select(Episode))
-        ]
-        shots = [
-            {
-                "id": row.id,
-                "episode_id": row.episode_id,
-                "no": row.no,
-                "title": row.title,
-                "visual": row.visual or "",
-                "dialogue": row.dialogue or "",
-                "characters": row.characters or [],
-                "scene": row.scene or "",
-                "duration": row.duration,
-                "status": row.status,
-                "updated_at": fmt_dt(row.updated_at),
-            }
-            for row in db.scalars(select(Shot))
-        ]
-
-        refs_by_asset: dict[str, list[dict]] = defaultdict(list)
-        for ref in db.scalars(select(AssetReference).order_by(AssetReference.sort_order)):
-            refs_by_asset[ref.asset_id].append(
-                {
-                    "id": ref.id,
-                    "type": ref.type,
-                    "name": ref.name,
-                    "url": ref.url,
-                    "note": ref.note,
-                }
-            )
-        assets = [
-            {
-                "id": row.id,
-                "project_id": row.project_id,
-                "type": row.type,
-                "name": row.name,
-                "description": row.description or "",
-                "ref_count": len(refs_by_asset.get(row.id, [])),
-                "initial": row.initial or row.name[:1],
-                "image": row.image_url,
-                "voice": row.voice_label,
-                "voice_url": row.voice_url,
-                "speaker_id": row.speaker_id,
-                "voice_status": row.voice_status,
-                "references": refs_by_asset.get(row.id, []),
-                "updated_at": fmt_dt(row.updated_at),
-            }
-            for row in db.scalars(select(Asset))
-        ]
-        video_tasks = [
-            {
-                "id": row.id,
-                "episode_id": row.episode_id,
-                "shot_id": row.shot_id,
-                "ai_job_id": row.ai_job_id,
-                "title": row.title,
-                "duration": row.duration,
-                "progress": row.progress,
-                "status": row.status,
-                "provider": row.provider,
-                "provider_task_id": row.provider_task_id,
-                "preview_url": row.preview_url,
-                "video_url": row.video_url,
-                "error": row.error,
-                "updated_at": fmt_dt(row.updated_at),
-            }
-            for row in db.scalars(select(VideoTask))
-        ]
-        video_versions = [
-            {
-                "id": row.id,
-                "project_id": row.project_id,
-                "episode_id": row.episode_id,
-                "name": row.name,
-                "description": row.description or "",
-                "duration": row.duration,
-                "ratio": row.ratio,
-                "status": row.status,
-                "theme": row.theme,
-                "preview_url": row.preview_url,
-                "video_url": row.video_url,
-                "created_at": fmt_dt(row.created_at),
-            }
-            for row in db.scalars(select(VideoVersion))
-        ]
-        point_ledger = []
-        for row in db.scalars(select(PointLedger).order_by(PointLedger.created_at.desc())):
-            ledger_user = user_by_id.get(row.user_id)
-            point_ledger.append(
-                {
-                    "id": row.id,
-                    "user_id": row.user_id,
-                    "username": ledger_user.username if ledger_user else "",
-                    "display_name": ledger_user.display_name if ledger_user else "",
-                    "amount": row.amount,
-                    "type": row.type,
-                    "scene": row.scene,
-                    "description": row.description or "",
-                    "balance_after": row.balance_after,
-                    "ai_job_id": row.ai_job_id,
-                    "created_at": fmt_dt(row.created_at),
-                }
-            )
-        ai_jobs = [
-            {
-                "id": row.id,
-                "user_id": row.user_id,
-                "project_id": row.project_id,
-                "episode_id": row.episode_id,
-                "shot_id": row.shot_id,
-                "asset_id": row.asset_id,
-                "type": row.type,
-                "provider": row.provider,
-                "provider_task_id": row.provider_task_id,
-                "status": row.status,
-                "progress": row.progress,
-                "input_json": row.input_json or {},
-                "output_json": row.output_json or {},
-                "error": row.error,
-                "cost_points": row.cost_points,
-                "created_at": fmt_dt(row.created_at),
-                "updated_at": fmt_dt(row.updated_at),
-                "completed_at": fmt_dt(row.completed_at),
-            }
-            for row in db.scalars(select(AiJob).order_by(AiJob.created_at.desc()))
-        ]
-        user_rows = [
-            {
-                "id": row.id,
-                "username": row.username,
-                "display_name": row.display_name,
-                "password_hash": row.password_hash,
-                "role": row.role,
-                "status": row.status,
-                "points": row.points,
-                "token": row.token or "",
-                "usage": row.usage_json or {},
-                "created_at": fmt_dt(row.created_at),
-                "last_login": fmt_dt(row.last_login_at),
-            }
-            for row in users
-        ]
-        usage = {
-            **DEFAULT_USAGE,
-            "video_used_seconds": sum((user.usage_json or {}).get("video_used_seconds", 0) for user in users),
-            "image_used": sum((user.usage_json or {}).get("image_used", 0) for user in users),
-            "export_used": sum((user.usage_json or {}).get("export_used", 0) for user in users),
-            "team_members": len([user for user in users if user.status == "active"]),
-        }
-        return {
-            "projects": projects,
-            "episodes": episodes,
-            "shots": shots,
-            "assets": assets,
-            "video_tasks": video_tasks,
-            "video_versions": video_versions,
-            "usage": usage,
-            "users": user_rows,
-            "point_ledger": point_ledger,
-            "ai_jobs": ai_jobs,
-        }
-
-
-@require_db
-def save_data(data: dict[str, Any]) -> None:
-    with SessionLocal() as db:
-        for model in [PointLedger, VideoVersion, VideoTask, AiJob, AssetReference, Asset, Shot, Episode, Project]:
-            db.execute(delete(model))
-        db.flush()
-
-        for item in data.get("users", []):
-            db.merge(
-                User(
-                    id=item["id"],
-                    username=item["username"],
-                    password_hash=item["password_hash"],
-                    display_name=item.get("display_name") or item["username"],
-                    role=item.get("role", "user"),
-                    status=item.get("status", "active"),
-                    points=int(item.get("points", 0)),
-                    token=item.get("token") or None,
-                    usage_json=item.get("usage", {}),
-                    created_at=parse_dt(item.get("created_at")),
-                    last_login_at=parse_dt(item.get("last_login")),
-                )
-            )
-        db.flush()
-        for item in data.get("projects", []):
-            db.add(
-                Project(
-                    id=item["id"],
-                    owner_user_id=item.get("owner_user_id", "user_admin"),
-                    name=item["name"],
-                    short_name=item.get("short_name") or item["name"][:8],
-                    description=item.get("description", ""),
-                    status=item.get("status", "draft"),
-                    cover=item.get("cover"),
-                    cover_image_url=item.get("cover_image") or item.get("cover_image_url"),
-                    updated_at=parse_dt(item.get("updated_at")),
-                )
-            )
-        db.flush()
-        for item in data.get("episodes", []):
-            db.add(
-                Episode(
-                    id=item["id"],
-                    project_id=item["project_id"],
-                    no=int(item["no"]),
-                    title=item["title"],
-                    summary=item.get("summary", ""),
-                    script=item.get("script", ""),
-                    duration_target=int(item.get("duration_target", 30)),
-                    status=item.get("status", "draft"),
-                    updated_at=parse_dt(item.get("updated_at")),
-                )
-            )
-        db.flush()
-        for item in data.get("shots", []):
-            db.add(
-                Shot(
-                    id=item["id"],
-                    episode_id=item["episode_id"],
-                    no=int(item["no"]),
-                    title=item["title"],
-                    visual=item.get("visual", ""),
-                    dialogue=item.get("dialogue", ""),
-                    characters=item.get("characters", []),
-                    scene=item.get("scene", ""),
-                    duration=int(item.get("duration", 3)),
-                    status=item.get("status", "pending"),
-                    updated_at=parse_dt(item.get("updated_at")),
-                )
-            )
-        db.flush()
-        for item in data.get("assets", []):
-            db.add(
-                Asset(
-                    id=item["id"],
-                    project_id=item["project_id"],
-                    type=item["type"],
-                    name=item["name"],
-                    description=item.get("description", ""),
-                    initial=item.get("initial") or item["name"][:1],
-                    image_url=item.get("image") or item.get("image_url"),
-                    voice_label=item.get("voice"),
-                    voice_url=item.get("voice_url"),
-                    speaker_id=item.get("speaker_id"),
-                    voice_status=item.get("voice_status"),
-                    generation_prompt=item.get("generation_prompt"),
-                    provider_meta=item.get("provider_meta", {}),
-                    updated_at=parse_dt(item.get("updated_at")),
-                )
-            )
-            for index, ref in enumerate(item.get("references", []) or []):
-                db.add(
-                    AssetReference(
-                        id=ref.get("id") or f"{item['id']}_ref_{index + 1}",
-                        asset_id=item["id"],
-                        type=ref.get("type", "image"),
-                        name=ref.get("name", f"参考 {index + 1}"),
-                        url=ref.get("url"),
-                        note=ref.get("note"),
-                        sort_order=index,
-                    )
-                )
-        db.flush()
-        for item in data.get("ai_jobs", []):
-            db.add(
-                AiJob(
-                    id=item["id"],
-                    user_id=item["user_id"],
-                    project_id=item.get("project_id"),
-                    episode_id=item.get("episode_id"),
-                    shot_id=item.get("shot_id"),
-                    asset_id=item.get("asset_id"),
-                    type=item["type"],
-                    provider=item["provider"],
-                    provider_task_id=item.get("provider_task_id"),
-                    status=item.get("status", "running"),
-                    progress=int(item.get("progress", 0)),
-                    input_json=item.get("input_json", {}),
-                    output_json=item.get("output_json", {}),
-                    error=item.get("error"),
-                    cost_points=int(item.get("cost_points", 0)),
-                    created_at=parse_dt(item.get("created_at")),
-                    updated_at=parse_dt(item.get("updated_at")),
-                    completed_at=parse_dt(item.get("completed_at")),
-                )
-            )
-        db.flush()
-        for item in data.get("video_tasks", []):
-            db.add(
-                VideoTask(
-                    id=item["id"],
-                    episode_id=item["episode_id"],
-                    shot_id=item["shot_id"],
-                    ai_job_id=item.get("ai_job_id"),
-                    title=item["title"],
-                    duration=int(item.get("duration", 1)),
-                    progress=int(item.get("progress", 0)),
-                    status=item.get("status", "pending"),
-                    provider=item.get("provider"),
-                    provider_task_id=item.get("provider_task_id"),
-                    preview_url=item.get("preview_url"),
-                    video_url=item.get("video_url"),
-                    error=item.get("error"),
-                    updated_at=parse_dt(item.get("updated_at")),
-                )
-            )
-        for item in data.get("video_versions", []):
-            db.add(
-                VideoVersion(
-                    id=item["id"],
-                    project_id=item["project_id"],
-                    episode_id=item["episode_id"],
-                    name=item["name"],
-                    description=item.get("description", ""),
-                    duration=int(item.get("duration", 1)),
-                    ratio=item.get("ratio", "9:16"),
-                    status=item.get("status", "review"),
-                    theme=item.get("theme"),
-                    preview_url=item.get("preview_url"),
-                    video_url=item.get("video_url"),
-                    created_at=parse_dt(item.get("created_at")),
-                )
-            )
-        for item in data.get("point_ledger", []):
-            db.add(
-                PointLedger(
-                    id=item["id"],
-                    user_id=item["user_id"],
-                    amount=int(item["amount"]),
-                    type=item.get("type", "consume"),
-                    scene=item.get("scene", ""),
-                    description=item.get("description", ""),
-                    balance_after=int(item.get("balance_after", 0)),
-                    ai_job_id=item.get("ai_job_id"),
-                    created_at=parse_dt(item.get("created_at")),
-                )
-            )
-        db.commit()

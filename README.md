@@ -38,3 +38,7 @@ pnpm dev
 打开：`http://localhost:5173`
 
 管理员后台：`http://localhost:5173/admin`
+
+## 使用说明
+
+完整使用说明见：[docs/使用说明.md](docs/使用说明.md)
