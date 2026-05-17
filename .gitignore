@@ -13,4 +13,5 @@ frontend/.vite-dev.log
 
 # Env
 .env
+.env.local
 .DS_Store

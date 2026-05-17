@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from .utils import fix_database_url
 
 load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env.local", override=True)
 
 DATABASE_URL = fix_database_url(os.getenv("DATABASE_URL", ""))
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")

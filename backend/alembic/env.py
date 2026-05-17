@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env.local"), override=True)
 
 from app.db import Base
 from app import models  # noqa: F401
