@@ -24,6 +24,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 };
 
 async function proxy(path: string, request: Request, method?: string) {
+  const url = new URL(request.url);
   const headers = new Headers();
   const token = request.headers.get('x-user-token');
   if (token) headers.set('X-User-Token', token);
@@ -31,7 +32,7 @@ async function proxy(path: string, request: Request, method?: string) {
   const contentType = request.headers.get('content-type');
   if (contentType) headers.set('Content-Type', contentType);
 
-  const res = await fetch(`${BACKEND}/api/${path}`, {
+  const res = await fetch(`${BACKEND}/api/${path}${url.search}`, {
     method: method || request.method,
     headers,
     body: ['GET', 'HEAD'].includes(method || request.method) ? undefined : await request.arrayBuffer()

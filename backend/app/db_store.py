@@ -67,6 +67,22 @@ def find_user_by_username(username: str) -> dict[str, Any] | None:
 
 
 @require_db
+def get_public_user(user_id: str) -> dict[str, Any] | None:
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        return public_user_dict(user) if user else None
+
+
+@require_db
+def user_has_points(user_id: str, cost: int) -> bool:
+    if cost <= 0:
+        return True
+    with SessionLocal() as db:
+        points = db.scalar(select(User.points).where(User.id == user_id))
+        return points is not None and int(points or 0) >= cost
+
+
+@require_db
 def update_user_login(user_id: str, token: str, last_login: str) -> None:
     with SessionLocal() as db:
         user = db.get(User, user_id)

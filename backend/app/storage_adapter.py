@@ -314,6 +314,13 @@ class Storage:
         return db_store.admin_users()
 
     @staticmethod
+    def admin_user(user_id: str) -> dict:
+        user = db_store.get_public_user(user_id)
+        if not user:
+            not_found("user")
+        return user
+
+    @staticmethod
     def admin_update_user(user_id: str, role: str | None, status: str | None) -> dict:
         updated = db_store.admin_update_user(user_id, role, status)
         if not updated:
@@ -332,7 +339,7 @@ class Storage:
         updated = db_store.admin_reset_password(user_id, password_hash)
         if not updated:
             not_found("user")
-        return {"user": updated}
+        return updated
 
     @staticmethod
     def admin_point_ledger(user_id: str | None = None) -> list[dict]:
@@ -359,3 +366,7 @@ class Storage:
     @staticmethod
     def find_user_by_token(token: str | None) -> dict | None:
         return db_store.find_user_by_token(token)
+
+    @staticmethod
+    def user_has_points(user_id: str, cost: int) -> bool:
+        return db_store.user_has_points(user_id, cost)

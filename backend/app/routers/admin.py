@@ -27,10 +27,7 @@ def admin_users(admin: dict = Depends(require_admin)):
 
 @router.patch("/users/{user_id}")
 def admin_update_user(user_id: str, payload: AdminUserUpdate, admin: dict = Depends(require_admin)):
-    users = Storage.admin_users()
-    target = next((item for item in users if item["id"] == user_id), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="user not found")
+    target = Storage.admin_user(user_id)
     is_self_update = target["id"] == admin["id"]
     is_primary = is_primary_admin(target)
     if is_self_update and payload.status == "disabled":
@@ -61,10 +58,7 @@ def admin_adjust_points(user_id: str, payload: AdminPointAdjust, admin: dict = D
 
 @router.patch("/users/{user_id}/password")
 def admin_reset_user_password(user_id: str, payload: AdminPasswordReset, admin: dict = Depends(require_admin)):
-    users = Storage.admin_users()
-    target = next((item for item in users if item["id"] == user_id), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="user not found")
+    target = Storage.admin_user(user_id)
     if target["id"] == admin["id"]:
         raise HTTPException(status_code=400, detail="请在账号设置中修改自己的密码")
     if is_primary_admin(target):

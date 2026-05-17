@@ -35,6 +35,7 @@ from ..security import get_current_user
 from ..utils import comparable_asset_names, normalize_refs
 from ..storage_adapter import Storage
 from ..utils import now, uid
+from ..services.generation_guard import cost_for_shots, ensure_points
 
 router = APIRouter(prefix="/api", tags=["content"])
 
@@ -168,6 +169,7 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
 
 @router.post("/projects/generate-outline", response_model=OutlineGenerateResponse)
 def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depends(get_current_user)):
+    ensure_points(user, POINT_RULES["outline"])
     try:
         episodes = ai_llm.generate_outline(payload)
     except AIError as exc:
@@ -235,6 +237,7 @@ def prepare_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
     context = Storage.episode_generation_context(user, episode_id)
     if not context:
         not_found("episode")
+    ensure_points(user, POINT_RULES["storyboard"])
     try:
         ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], context["assets"])
     except AIError as exc:
@@ -260,6 +263,7 @@ def generate_storyboard(episode_id: str, payload: StoryboardGenerateRequest | No
         if asset.get("type") in {"character", "scene"}
     }
     assets_to_generate = [item for item in confirmed_assets if item["name"].strip() not in existing_names]
+    ensure_points(user, POINT_RULES["storyboard"] + len(assets_to_generate) * POINT_RULES["image_asset"])
     generated_assets: list[dict] = []
     for item in assets_to_generate:
         try:
@@ -292,6 +296,7 @@ def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
 @router.post("/shots/{shot_id}/generate-video")
 def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)):
     shot, episode, assets = Storage.get_shot_with_context(user, shot_id)
+    ensure_points(user, cost_for_shots([shot], POINT_RULES["video_second"]))
     data = {"episodes": [episode] if episode else [], "assets": assets}
     try:
         provider_task_id = ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(data, shot), shot["duration"])
@@ -308,6 +313,7 @@ def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user))
     shots = context.get("shots", [])
     if not shots:
         not_found("shots")
+    ensure_points(user, cost_for_shots(shots, POINT_RULES["video_second"]))
     data = {"episodes": [context["episode"]], "assets": context.get("assets", [])}
     try:
         provider_tasks = {
@@ -333,6 +339,8 @@ def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get
 @router.post("/projects/{project_id}/assets/generate")
 def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends(get_current_user)):
     visual_asset = payload.type in {"character", "scene", "image"}
+    Storage.get_project(user, project_id)
+    ensure_points(user, POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"])
     if visual_asset:
         try:
             generated_url = ai_image.generate_image(payload.prompt)
@@ -365,6 +373,7 @@ def start_voice_clone(asset_id: str, payload: VoiceCloneRequest, user: dict = De
     if not payload.consent:
         raise HTTPException(status_code=400, detail="请确认已获得声音授权")
     asset = Storage.get_asset(user, asset_id)
+    ensure_points(user, POINT_RULES["voice_clone"])
     voice_url = payload.voice_url or asset.get("voice_url")
     if not voice_url or not voice_url.startswith("/uploads/"):
         raise HTTPException(status_code=400, detail="请先上传角色声音样本")
@@ -436,6 +445,7 @@ def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depen
     shots = context.get("shots", [])
     if not shots or any(shot.get("status") != "completed" for shot in shots):
         raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
+    ensure_points(user, POINT_RULES["compose"])
     shot_order = {shot["id"]: shot["no"] for shot in shots}
     video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
     return Storage.save_composed_version(user, episode_id, payload, video_url, POINT_RULES["compose"])
