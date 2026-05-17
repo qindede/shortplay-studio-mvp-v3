@@ -5,9 +5,11 @@ from fastapi import HTTPException
 from ..ai import image as ai_image
 from ..ai import llm as ai_llm
 from ..ai import video as ai_video
+from ..ai import voice as ai_voice
 from ..ai.errors import AIError
 from ..config import BACKEND_PUBLIC_URL, POINT_RULES
-from ..schemas import AssetGenerate, OutlineGenerateRequest, StoryboardGenerateRequest
+from .. import storage
+from ..schemas import AssetGenerate, ComposeRequest, OutlineGenerateRequest, StoryboardGenerateRequest, VoiceCloneRequest
 from ..storage_adapter import Storage
 from ..utils import comparable_asset_names, now, uid
 
@@ -211,3 +213,59 @@ def generate_asset(user: dict, project_id: str, payload: AssetGenerate) -> dict:
 
     Storage.complete_ai_job(job["id"], {"asset_id": asset["id"], "url": generated_url})
     return asset
+
+
+def start_voice_clone(user: dict, asset_id: str, payload: VoiceCloneRequest) -> dict:
+    if not payload.consent:
+        raise HTTPException(status_code=400, detail="请确认已获得声音授权")
+    asset = Storage.get_asset(user, asset_id)
+    voice_url = payload.voice_url or asset.get("voice_url")
+    if not voice_url or not voice_url.startswith("/uploads/"):
+        raise HTTPException(status_code=400, detail="请先上传角色声音样本")
+    job = Storage.start_paid_ai_job(
+        user,
+        POINT_RULES["voice_clone"],
+        "音色克隆",
+        f"训练《{asset['name']}》角色音色",
+        "voice_clone",
+        "volc_voice",
+        project_id=asset.get("project_id"),
+        asset_id=asset_id,
+    )
+    try:
+        audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
+        speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
+        result = ai_voice.clone_voice(speaker_id, audio, voice_url.rsplit(".", 1)[-1] if "." in voice_url else "wav")
+        return Storage.update_voice_clone_with_job(user, asset_id, result, job["id"])
+    except (AIError, storage.StorageError) as exc:
+        Storage.fail_ai_job_with_refund(job["id"], getattr(exc, "public_message", str(exc)))
+        raise
+    except Exception as exc:
+        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
+        raise
+
+
+def compose_episode(user: dict, episode_id: str, payload: ComposeRequest, compose_video_file) -> dict:
+    context = Storage.compose_context(user, episode_id)
+    if not context:
+        raise HTTPException(status_code=404, detail="episode not found")
+    shots = context.get("shots", [])
+    if not shots or any(shot.get("status") != "completed" for shot in shots):
+        raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
+    job = Storage.start_paid_ai_job(
+        user,
+        POINT_RULES["compose"],
+        "合成成片",
+        f"合成《{context['episode']['title']}》成片版本",
+        "compose",
+        "ffmpeg",
+        project_id=context["project"]["id"],
+        episode_id=episode_id,
+    )
+    try:
+        shot_order = {shot["id"]: shot["no"] for shot in shots}
+        video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
+        return Storage.save_composed_version_with_job(user, episode_id, payload, video_url, job["id"])
+    except Exception as exc:
+        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "合成失败")
+        raise

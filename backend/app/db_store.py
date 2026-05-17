@@ -1917,7 +1917,7 @@ def get_asset(user: dict[str, Any], asset_id: str) -> dict[str, Any] | None:
 
 
 @require_db
-def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, Any], cost: int, timestamp: str, consume: bool = True) -> dict[str, Any] | None:
+def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, Any], cost: int, timestamp: str, consume: bool = True, job_id: str | None = None) -> dict[str, Any] | None:
     ts = parse_dt(timestamp)
     with SessionLocal() as db:
         asset = db.scalar(
@@ -1927,6 +1927,7 @@ def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, An
         )
         if not asset:
             return None
+        job = db.get(AiJob, job_id) if job_id else None
         if consume:
             try:
                 _change_points(db, user["id"], -cost, "consume", "音色克隆", f"训练《{asset.name}》角色音色", ts)
@@ -1936,7 +1937,16 @@ def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, An
             if key in result and attr:
                 setattr(asset, attr, result[key])
         asset.updated_at = ts
-        if consume:
+        if job:
+            job.provider_task_id = asset.speaker_id
+            job.project_id = asset.project_id
+            job.asset_id = asset_id
+            job.status = "succeeded" if asset.voice_status == "completed" else "running"
+            job.progress = 100 if asset.voice_status == "completed" else 0
+            job.updated_at = ts
+            if asset.voice_status == "completed":
+                job.completed_at = ts
+        elif consume:
             _add_ai_job(
                 db,
                 user["id"],
@@ -1965,7 +1975,7 @@ def compose_context(user: dict[str, Any], episode_id: str) -> dict[str, Any] | N
 
 
 @require_db
-def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, video_url: str, cost: int, timestamp: str) -> dict[str, Any] | None:
+def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, video_url: str, cost: int, timestamp: str, charge: bool = True, job_id: str | None = None) -> dict[str, Any] | None:
     ts = parse_dt(timestamp)
     with SessionLocal() as db:
         episode = db.scalar(
@@ -1975,11 +1985,12 @@ def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, v
         )
         if not episode:
             return None
-        try:
-            _change_points(db, user["id"], -cost, "consume", "合成成片", f"合成《{episode.title}》成片版本", ts)
-        except ValueError as exc:
-            return {"error": str(exc)}
-        _add_ai_job(db, user["id"], "compose", "ffmpeg", cost, ts, episode_id=episode_id, project_id=episode.project_id)
+        if charge:
+            try:
+                _change_points(db, user["id"], -cost, "consume", "合成成片", f"合成《{episode.title}》成片版本", ts)
+            except ValueError as exc:
+                return {"error": str(exc)}
+            _add_ai_job(db, user["id"], "compose", "ffmpeg", cost, ts, episode_id=episode_id, project_id=episode.project_id)
         version_no = db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.episode_id == episode_id)) + 1
         version = VideoVersion(
             id=uid("ver"),
@@ -1996,6 +2007,15 @@ def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, v
             created_at=ts,
         )
         db.add(version)
+        job = db.get(AiJob, job_id) if job_id else None
+        if job:
+            job.episode_id = episode_id
+            job.project_id = episode.project_id
+            job.status = "succeeded"
+            job.progress = 100
+            job.output_json = {"version_id": version.id, "video_url": video_url}
+            job.updated_at = ts
+            job.completed_at = ts
         target_user = db.get(User, user["id"])
         if target_user:
             usage_data = dict(target_user.usage_json or {})

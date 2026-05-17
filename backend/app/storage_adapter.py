@@ -213,6 +213,13 @@ class Storage:
             raise HTTPException(status_code=402, detail="积分不足")
         return updated
 
+    @staticmethod
+    def update_voice_clone_with_job(user: dict, asset_id: str, result: dict, job_id: str) -> dict:
+        updated = db_store.update_voice_clone(user, asset_id, result, 0, now(), consume=False, job_id=job_id)
+        if updated is None:
+            not_found("asset")
+        return updated
+
     # ── DELETE ───────────────────────────────────────────────────────────
 
     @staticmethod
@@ -342,6 +349,13 @@ class Storage:
         version = db_store.save_composed_version(user, episode_id, payload, video_url, cost, now())
         if isinstance(version, dict) and version.get("error") == "insufficient_points":
             raise HTTPException(status_code=402, detail="积分不足")
+        return version
+
+    @staticmethod
+    def save_composed_version_with_job(user: dict, episode_id: str, payload: Any, video_url: str, job_id: str) -> dict:
+        version = db_store.save_composed_version(user, episode_id, payload, video_url, POINT_RULES["compose"], now(), charge=False, job_id=job_id)
+        if version is None:
+            not_found("episode")
         return version
 
     # ── ADMIN ────────────────────────────────────────────────────────────

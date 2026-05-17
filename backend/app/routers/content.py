@@ -32,7 +32,6 @@ from ..schemas import (
 from ..security import get_current_user
 from ..utils import comparable_asset_names, normalize_refs
 from ..storage_adapter import Storage
-from ..utils import uid
 from ..services.generation_guard import ensure_points
 from ..services import generation_service
 
@@ -260,20 +259,10 @@ def delete_asset(asset_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/assets/{asset_id}/voice-clone")
 def start_voice_clone(asset_id: str, payload: VoiceCloneRequest, user: dict = Depends(get_current_user)):
-    if not payload.consent:
-        raise HTTPException(status_code=400, detail="请确认已获得声音授权")
-    asset = Storage.get_asset(user, asset_id)
-    ensure_points(user, POINT_RULES["voice_clone"])
-    voice_url = payload.voice_url or asset.get("voice_url")
-    if not voice_url or not voice_url.startswith("/uploads/"):
-        raise HTTPException(status_code=400, detail="请先上传角色声音样本")
     try:
-        audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
-        speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
-        result = ai_voice.clone_voice(speaker_id, audio, Path(voice_url).suffix.lstrip(".") or "wav")
+        return generation_service.start_voice_clone(user, asset_id, payload)
     except (AIError, storage.StorageError) as exc:
         raise HTTPException(status_code=503, detail=getattr(exc, "public_message", str(exc))) from exc
-    return Storage.update_voice_clone(user, asset_id, result, cost=POINT_RULES["voice_clone"], consume=True, create_job=True)
 
 
 @router.get("/assets/{asset_id}/voice-clone")
@@ -329,16 +318,7 @@ def compose_video_file(tasks: list[dict]) -> str:
 
 @router.post("/episodes/{episode_id}/compose")
 def compose_episode(episode_id: str, payload: ComposeRequest, user: dict = Depends(get_current_user)):
-    context = Storage.compose_context(user, episode_id)
-    if not context:
-        not_found("episode")
-    shots = context.get("shots", [])
-    if not shots or any(shot.get("status") != "completed" for shot in shots):
-        raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
-    ensure_points(user, POINT_RULES["compose"])
-    shot_order = {shot["id"]: shot["no"] for shot in shots}
-    video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
-    return Storage.save_composed_version(user, episode_id, payload, video_url, POINT_RULES["compose"])
+    return generation_service.compose_episode(user, episode_id, payload, compose_video_file)
 
 
 @router.get("/ai-jobs/{job_id}")
