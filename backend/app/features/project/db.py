@@ -1,3 +1,4 @@
+"""Project database access. No HTTP exceptions here."""
 from __future__ import annotations
 
 from typing import Any
