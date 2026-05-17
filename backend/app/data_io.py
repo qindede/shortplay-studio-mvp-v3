@@ -24,8 +24,31 @@ from .models import (
 from .utils import fmt_dt, parse_dt, uid
 
 
+def _ensure_seed_data() -> None:
+    """Create default users and load seed data if the database is empty."""
+    with SessionLocal() as db:
+        has_users = db.scalar(select(User.id).limit(1))
+        if has_users:
+            return
+        from .security import hash_password
+        from .seed_data import seed_data
+        ts = datetime.now()
+        for username, display_name, role, points in [
+            ("admin", "管理员", "admin", 100000),
+            ("demo", "演示用户", "user", 2000),
+        ]:
+            db.add(User(
+                id=uid("user"), username=username, display_name=display_name,
+                password_hash=hash_password("admin123" if role == "admin" else "demo123"),
+                role=role, status="active", points=points, token=None,
+                usage_json={}, created_at=ts, last_login_at=None,
+            ))
+        db.commit()
+    from .data_io import save_data
+    save_data(seed_data())
+
+
 def load_data() -> dict[str, Any]:
-    from .db_store import _ensure_seed_data
     _ensure_seed_data()
     with SessionLocal() as db:
         users = list(db.scalars(select(User)))

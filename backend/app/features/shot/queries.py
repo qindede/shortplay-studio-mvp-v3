@@ -6,8 +6,7 @@ from typing import Any
 
 from sqlalchemy import select, text
 
-from ...db import SessionLocal
-from ...db_store import require_db
+from ...db import SessionLocal, require_db
 from ...models import Asset, AssetReference, Episode, Project, Shot, VideoTask
 from ...serializers import _asset_dict, _episode_dict, _project_dict, _shot_dict
 from ...utils import parse_dt

@@ -147,7 +147,7 @@ def storyboard_missing_assets(ai_shots: list[dict], assets: list[dict]) -> list[
 def prepare_storyboard(user: dict, episode_id: str) -> dict:
     """Preview endpoint: generate storyboard without persisting, return cost + missing assets."""
     from ...ai.errors import AIError
-    from ...services.generation_guard import ensure_points
+    from ..points.service import ensure_points
 
     context = queries.episode_generation_context(user, episode_id)
     if not context:

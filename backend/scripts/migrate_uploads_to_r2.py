@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import data_io, db_store, storage
+from app import data_io, db, storage
 from app.config import UPLOAD_DIR
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "db.json"
@@ -24,13 +24,13 @@ def replace_value(value, mapping: dict[str, str]):
 
 
 def load_current_data() -> dict:
-    if db_store.enabled():
+    if db.enabled():
         return data_io.load_data()
     return json.loads(DATA_PATH.read_text(encoding="utf-8"))
 
 
 def save_current_data(data: dict) -> None:
-    if db_store.enabled():
+    if db.enabled():
         data_io.save_data(data)
         return
     backup = DATA_PATH.with_suffix(".r2-backup.json")

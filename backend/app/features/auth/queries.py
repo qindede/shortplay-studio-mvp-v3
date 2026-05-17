@@ -5,8 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from ...db import SessionLocal
-from ...db_store import require_db
+from ...db import SessionLocal, require_db
 from ...models import PointLedger, User
 from ...security import verify_password
 from ...serializers import _user_dict

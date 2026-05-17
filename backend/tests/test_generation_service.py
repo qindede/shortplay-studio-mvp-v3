@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from app.ai.errors import AIError
-from app.services import generation_service
+from app.features.ai_job import service as generation_service
 
 
 class FakeStorage:
@@ -63,7 +63,7 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
         def work(job: dict):
             return {"ok": True, "job_id": job["id"]}, {"items": 2}
 
-        result = generation_service._run_paid_generation(
+        result = generation_service.run_paid_generation(
             {"id": "user_1"},
             20,
             "测试场景",
@@ -88,7 +88,7 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
             raise ProviderDown()
 
         with self.assertRaises(ProviderDown):
-            generation_service._run_paid_generation(
+            generation_service.run_paid_generation(
                 {"id": "user_1"},
                 20,
                 "测试场景",
@@ -106,7 +106,7 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
             raise RuntimeError()
 
         with self.assertRaises(RuntimeError):
-            generation_service._run_paid_generation(
+            generation_service.run_paid_generation(
                 {"id": "user_1"},
                 20,
                 "测试场景",
@@ -124,7 +124,7 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
         def work(job: dict):
             return {"task_id": "task_1"}, {"ignored": True}
 
-        result = generation_service._run_paid_generation(
+        result = generation_service.run_paid_generation(
             {"id": "user_1"},
             30,
             "生成镜头视频",

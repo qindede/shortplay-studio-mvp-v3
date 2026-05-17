@@ -5,8 +5,7 @@ from typing import Any
 from sqlalchemy import func, select, text
 
 from ...config import STATUS_LABEL
-from ...db import SessionLocal
-from ...db_store import require_db
+from ...db import SessionLocal, require_db
 from ...models import Episode, Project, Shot, VideoVersion
 from ...serializers import _episode_dict
 from ...utils import fmt_dt, parse_dt, uid

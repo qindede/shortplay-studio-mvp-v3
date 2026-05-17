@@ -6,8 +6,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from ...db import SessionLocal
-from ...db_store import require_db
+from ...db import SessionLocal, require_db
 from ...models import AiJob, Asset, AssetReference, Episode, PointLedger, Project, Shot, User, VideoTask, VideoVersion
 from ...serializers import _asset_dict, _episode_dict, _project_dict, _shot_dict, _video_task_dict, _video_version_dict
 from ...utils import fmt_dt, parse_dt, uid

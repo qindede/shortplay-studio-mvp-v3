@@ -6,8 +6,7 @@ from typing import Any
 
 from sqlalchemy import delete, select
 
-from ...db import SessionLocal
-from ...db_store import require_db
+from ...db import SessionLocal, require_db
 from ...models import AiJob, Asset, AssetReference, Project, User
 from ...serializers import _asset_dict
 from ...utils import parse_dt, uid
