@@ -15,3 +15,6 @@ frontend/.vite-dev.log
 .env
 .env.local
 .DS_Store
+
+# Worktrees
+.worktrees/
