@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..errors import DomainError
+from ..errors import InsufficientPointsError
 from . import queries
 
 
@@ -15,7 +15,7 @@ def ensure_points(user: dict, cost: int) -> None:
     if cost <= 0:
         return
     if not queries.user_has_points(user["id"], cost):
-        raise DomainError(402, f"积分不足：本次需要 {cost}")
+        raise InsufficientPointsError(f"积分不足：本次需要 {cost}")
 
 
 def cost_for_shots(shots: list[dict], cost_per_second: int) -> int:

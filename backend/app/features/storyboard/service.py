@@ -7,7 +7,7 @@ from ...config import POINT_RULES
 from ...schemas import OutlineGenerateRequest, StoryboardGenerateRequest
 from ...utils import comparable_asset_names, now, uid
 from ..ai_job.service import run_paid_generation as _run_paid_generation
-from ..errors import DomainError
+from ..errors import InsufficientPointsError, NotFoundError, ServiceUnavailableError
 from . import queries
 
 
@@ -60,7 +60,7 @@ def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerate
     """Generate storyboard shots and any missing assets via AI, persisting through save_storyboard."""
     context = queries.episode_generation_context(user, episode_id)
     if not context:
-        raise DomainError(404, "剧集不存在")
+        raise NotFoundError("剧集不存在")
 
     existing_assets = context["assets"]
     confirmed_assets = [item.model_dump() for item in (payload.confirmed_assets if payload else [])]
@@ -90,9 +90,9 @@ def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerate
             charge=False,
         )
         if shots is None:
-            raise DomainError(404, "剧集不存在")
+            raise NotFoundError("剧集不存在")
         if isinstance(shots, dict) and shots.get("error"):
-            raise DomainError(402, "积分不足")
+            raise InsufficientPointsError("积分不足")
         return shots, {"shot_count": len(shots), "generated_asset_count": len(generated_assets)}
 
     return _run_paid_generation(
@@ -151,12 +151,12 @@ def prepare_storyboard(user: dict, episode_id: str) -> dict:
 
     context = queries.episode_generation_context(user, episode_id)
     if not context:
-        raise DomainError(404, "剧集不存在")
+        raise NotFoundError("剧集不存在")
     ensure_points(user, POINT_RULES["storyboard"])
     try:
         ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], context["assets"])
     except AIError as exc:
-        raise DomainError(503, exc.public_message)
+        raise ServiceUnavailableError(exc.public_message)
     return {
         "cost": POINT_RULES["storyboard"],
         "asset_cost": POINT_RULES["image_asset"],
@@ -171,4 +171,4 @@ def optimize_prompt(prompt: str, context: str, project_name: str) -> dict:
     try:
         return {"optimized": ai_llm.optimize_prompt(prompt, context, project_name)}
     except AIError as exc:
-        raise DomainError(503, exc.public_message)
+        raise ServiceUnavailableError(exc.public_message)

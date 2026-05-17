@@ -9,21 +9,21 @@ from ...config import POINT_RULES
 from ... import storage
 from ...utils import normalize_refs, now, uid
 from ..ai_job.service import run_paid_generation as _run_paid_generation
-from ..errors import DomainError
+from ..errors import BadRequestError, InsufficientPointsError, NotFoundError
 from . import queries
 
 
 def list_assets(user: dict[str, Any], project_id: str, asset_type: str | None = None) -> list[dict]:
     result = queries.list_assets(user, project_id, asset_type)
     if result is None:
-        raise DomainError(404, "项目不存在")
+        raise NotFoundError("项目不存在")
     return result
 
 
 def get_asset(user: dict[str, Any], asset_id: str) -> dict:
     result = queries.get_asset(user, asset_id)
     if result is None:
-        raise DomainError(404, "素材不存在")
+        raise NotFoundError("素材不存在")
     return result
 
 
@@ -33,9 +33,9 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
     result = queries.create_asset(user, project_id, payload, refs, cost, now())
     if result is None:
-        raise DomainError(404, "项目不存在")
+        raise NotFoundError("项目不存在")
     if isinstance(result, dict) and result.get("error") == "insufficient_points":
-        raise DomainError(402, f"积分不足：本次需要 {cost}")
+        raise InsufficientPointsError(f"积分不足：本次需要 {cost}")
     return result
 
 
@@ -44,7 +44,7 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     from ..project.queries import get_project
     project = get_project(user, project_id)
     if not project:
-        raise DomainError(404, "项目不存在")
+        raise NotFoundError("项目不存在")
 
     visual_asset = payload.type in {"character", "scene", "image"}
     cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
@@ -77,11 +77,11 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
 def start_voice_clone(user: dict[str, Any], asset_id: str, payload: Any) -> dict:
     """Start voice cloning for an asset."""
     if not payload.consent:
-        raise DomainError(400, "请确认已获得声音授权")
+        raise BadRequestError("请确认已获得声音授权")
     asset = get_asset(user, asset_id)
     voice_url = payload.voice_url or asset.get("voice_url")
     if not voice_url or not voice_url.startswith("/uploads/"):
-        raise DomainError(400, "请先上传角色声音样本")
+        raise BadRequestError("请先上传角色声音样本")
 
     def work(job: dict) -> tuple[dict, dict]:
         audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
@@ -109,22 +109,22 @@ def update_asset(user: dict[str, Any], asset_id: str, payload: Any) -> dict:
     refs = normalize_refs(refs_raw) if refs_raw is not None else None
     result = queries.update_asset(user, asset_id, payload, refs, now())
     if result is None:
-        raise DomainError(404, "素材不存在")
+        raise NotFoundError("素材不存在")
     return result
 
 
 def delete_asset(user: dict[str, Any], asset_id: str) -> dict:
     if not queries.delete_asset(user, asset_id):
-        raise DomainError(404, "素材不存在")
+        raise NotFoundError("素材不存在")
     return {"ok": True}
 
 
 def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, Any], cost: int = 0, consume: bool = True, job_id: str | None = None) -> dict:
     updated = queries.update_voice_clone(user, asset_id, result, cost, now(), consume=consume, job_id=job_id)
     if updated is None:
-        raise DomainError(404, "素材不存在")
+        raise NotFoundError("素材不存在")
     if isinstance(updated, dict) and updated.get("error") == "insufficient_points":
-        raise DomainError(402, "积分不足")
+        raise InsufficientPointsError("积分不足")
     return updated
 
 

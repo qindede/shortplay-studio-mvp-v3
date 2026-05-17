@@ -16,8 +16,7 @@ from .features.shot.router import router as shot_router
 from .features.storyboard.router import router as storyboard_router
 from .features.video.router import router as video_router
 from .features.workspace.router import router as workspace_router
-from .routers import upload
-from . import storage
+from .features.upload.router import router as upload_router
 from .ai.client import close_client
 
 
@@ -47,18 +46,10 @@ app.include_router(storyboard_router)
 app.include_router(asset_router)
 app.include_router(video_router)
 app.include_router(ai_job_router)
-app.include_router(upload.router)
+app.include_router(upload_router)
 
 
 @app.get("/api/health")
 def health():
     return {"ok": True, "name": "Muran"}
 
-
-@app.get("/uploads/{path:path}")
-def uploads(path: str):
-    try:
-        data, content_type = storage.get_object(path)
-    except storage.StorageError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return Response(content=data, media_type=content_type)

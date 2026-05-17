@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from ...schemas import ProjectCreate, ProjectUpdate
 from ...security import get_current_user
 from ..router_utils import api_endpoint
 from . import service
@@ -17,7 +18,7 @@ def list_projects(user: dict = Depends(get_current_user)):
 
 @router.post("/projects")
 @api_endpoint
-def create_project(payload, user: dict = Depends(get_current_user)):
+def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user)):
     return service.create_project(user, payload)
 
 
@@ -29,7 +30,7 @@ def get_project(project_id: str, user: dict = Depends(get_current_user)):
 
 @router.put("/projects/{project_id}")
 @api_endpoint
-def update_project(project_id: str, payload, user: dict = Depends(get_current_user)):
+def update_project(project_id: str, payload: ProjectUpdate, user: dict = Depends(get_current_user)):
     return service.update_project(user, project_id, payload)
 
 

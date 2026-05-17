@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from ...schemas import EpisodeCreate, EpisodeUpdate
 from ...security import get_current_user
 from ..router_utils import api_endpoint
 from . import service
@@ -17,7 +18,7 @@ def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/projects/{project_id}/episodes")
 @api_endpoint
-def create_episode(project_id: str, payload, user: dict = Depends(get_current_user)):
+def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends(get_current_user)):
     return service.create_episode(user, project_id, payload)
 
 
@@ -29,7 +30,7 @@ def get_episode(episode_id: str, user: dict = Depends(get_current_user)):
 
 @router.put("/episodes/{episode_id}")
 @api_endpoint
-def update_episode(episode_id: str, payload, user: dict = Depends(get_current_user)):
+def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends(get_current_user)):
     return service.update_episode(user, episode_id, payload)
 
 

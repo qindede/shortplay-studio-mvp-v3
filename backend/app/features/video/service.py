@@ -11,7 +11,7 @@ from ...ai.errors import AIError
 from ...config import BACKEND_PUBLIC_URL, FFMPEG_PATH, POINT_RULES
 from ... import storage
 from ..ai_job.service import run_paid_generation as _run_paid_generation
-from ..errors import DomainError
+from ..errors import BadRequestError, NotFoundError, ServiceUnavailableError
 from ...utils import now
 from . import queries
 
@@ -50,7 +50,7 @@ def generate_video_for_shot(user: dict, shot_id: str) -> dict:
     from ...features.shot.queries import shot_generation_context
     ctx = shot_generation_context(user, shot_id)
     if not ctx:
-        raise DomainError(404, "镜头不存在")
+        raise NotFoundError("镜头不存在")
     shot, episode, assets = ctx["shot"], ctx.get("episode"), ctx.get("assets", [])
     cost = _video_cost(shot)
 
@@ -82,10 +82,10 @@ def generate_videos_for_episode(user: dict, episode_id: str) -> list[dict]:
     from ...features.storyboard.queries import episode_generation_context
     context = episode_generation_context(user, episode_id)
     if not context:
-        raise DomainError(404, "剧集不存在")
+        raise NotFoundError("剧集不存在")
     shots = context.get("shots", [])
     if not shots:
-        raise DomainError(404, "分镜不存在")
+        raise NotFoundError("分镜不存在")
     tasks = []
     for shot in shots:
         tasks.append(generate_video_for_shot(user, shot["id"]))
@@ -95,10 +95,10 @@ def generate_videos_for_episode(user: dict, episode_id: str) -> list[dict]:
 def compose_episode(user: dict, episode_id: str, payload: Any, compose_video_file: Callable[[list[dict]], str]) -> dict:
     context = queries.compose_context(user, episode_id)
     if not context:
-        raise DomainError(404, "剧集不存在")
+        raise NotFoundError("剧集不存在")
     shots = context.get("shots", [])
     if not shots or any(shot.get("status") != "completed" for shot in shots):
-        raise DomainError(400, "所有镜头完成后才能合成本集视频")
+        raise BadRequestError("所有镜头完成后才能合成本集视频")
 
     def work(job: dict) -> tuple[dict, dict | None]:
         shot_order = {shot["id"]: shot["no"] for shot in shots}
@@ -129,7 +129,7 @@ def compose_video_file(tasks: list[dict]) -> str:
         for index, task in enumerate(tasks, start=1):
             url = task.get("video_url") or task.get("preview_url")
             if not url or not url.startswith("/uploads/"):
-                raise DomainError(400, "镜头视频文件不完整，无法合成")
+                raise BadRequestError("镜头视频文件不完整，无法合成")
             data, _ = storage.get_object(url.removeprefix("/uploads/"))
             path = tmpdir / f"{index:03d}.mp4"
             path.write_bytes(data)
@@ -144,9 +144,9 @@ def compose_video_file(tasks: list[dict]) -> str:
                 capture_output=True,
             )
         except FileNotFoundError as exc:
-            raise DomainError(503, "服务器未配置 ffmpeg") from exc
+            raise ServiceUnavailableError("服务器未配置 ffmpeg") from exc
         except subprocess.CalledProcessError as exc:
-            raise DomainError(503, "视频合成失败") from exc
+            raise ServiceUnavailableError("视频合成失败") from exc
         key = storage.make_object_key("composed", "episode.mp4", ".mp4")
         return storage.put_bytes(output.read_bytes(), key, "video/mp4")
 
@@ -156,7 +156,7 @@ def list_video_tasks_with_poll(user: dict, episode_id: str) -> list[dict]:
     from ...features.workspace.queries import episode_workspace
     payload = episode_workspace(user, episode_id)
     if payload is None:
-        raise DomainError(404, "剧集不存在")
+        raise NotFoundError("剧集不存在")
     tasks = payload["video_tasks"]
     for task in tasks:
         if task.get("status") != "generating" or not task.get("provider_task_id"):

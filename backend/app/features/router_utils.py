@@ -5,7 +5,33 @@ import functools
 
 from fastapi import HTTPException
 
-from .errors import DomainError
+from .errors import (
+    BadRequestError,
+    ConflictError,
+    DomainError,
+    ForbiddenError,
+    InsufficientPointsError,
+    NotFoundError,
+    ServiceUnavailableError,
+    UnauthorizedError,
+)
+
+ERROR_STATUS: dict[type[DomainError], int] = {
+    BadRequestError: 400,
+    UnauthorizedError: 401,
+    InsufficientPointsError: 402,
+    ForbiddenError: 403,
+    NotFoundError: 404,
+    ConflictError: 409,
+    ServiceUnavailableError: 503,
+}
+
+
+def _resolve_status(exc: DomainError) -> int:
+    for exc_class, status in ERROR_STATUS.items():
+        if isinstance(exc, exc_class):
+            return status
+    return 500
 
 
 def api_endpoint(fn):
@@ -18,6 +44,6 @@ def api_endpoint(fn):
                 return await fn(*args, **kwargs)
             return fn(*args, **kwargs)
         except DomainError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+            raise HTTPException(status_code=_resolve_status(exc), detail=exc.detail)
 
     return wrapper

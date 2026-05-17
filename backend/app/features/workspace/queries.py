@@ -1,3 +1,8 @@
+"""Workspace — 聚合读模型。
+
+本模块允许直接 join 多个表来构建前端所需的聚合视图；
+但不调用其他 feature 的 db/queries，也不做写操作。
+"""
 from __future__ import annotations
 
 from typing import Any
