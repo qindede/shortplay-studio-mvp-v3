@@ -602,6 +602,50 @@ def create_video_task(user: dict[str, Any], shot_id: str, provider_task_id: str,
 
 
 @require_db
+def attach_video_task_to_job(user: dict[str, Any], shot_id: str, provider_task_id: str, job_id: str, timestamp: str) -> dict[str, Any] | None:
+    ts = parse_dt(timestamp)
+    with SessionLocal() as db:
+        shot = db.scalar(
+            select(Shot)
+            .join(Episode, Episode.id == Shot.episode_id)
+            .join(Project, Project.id == Episode.project_id)
+            .where(Shot.id == shot_id, Project.owner_user_id == user["id"])
+        )
+        job = db.scalar(select(AiJob).where(AiJob.id == job_id, AiJob.user_id == user["id"]))
+        if not shot or not job:
+            return None
+        episode = db.get(Episode, shot.episode_id)
+        duration = max(1, int(shot.duration))
+        job.provider_task_id = provider_task_id
+        job.episode_id = shot.episode_id
+        job.shot_id = shot.id
+        job.project_id = episode.project_id if episode else None
+        job.updated_at = ts
+        task = db.scalar(select(VideoTask).where(VideoTask.shot_id == shot.id))
+        if not task:
+            task = VideoTask(id=uid("task"), episode_id=shot.episode_id, shot_id=shot.id, duration=duration, title=shot.title, progress=0, status="generating", updated_at=ts)
+            db.add(task)
+        task.title = shot.title
+        task.duration = duration
+        task.progress = 0
+        task.status = "generating"
+        task.provider = "seedance"
+        task.provider_task_id = provider_task_id
+        task.ai_job_id = job.id
+        task.error = None
+        task.updated_at = ts
+        shot.status = "generating"
+        shot.updated_at = ts
+        if episode:
+            episode.updated_at = ts
+            project = db.get(Project, episode.project_id)
+            if project:
+                project.updated_at = ts
+        db.commit()
+        return _video_task_dict(task)
+
+
+@require_db
 def batch_create_video_tasks(user: dict[str, Any], provider_tasks: dict[str, str], cost_per_second: int, timestamp: str) -> tuple[list[dict], str | None]:
     """Create multiple video tasks in a single transaction.
 
@@ -678,16 +722,35 @@ def update_video_task_from_provider(task: dict[str, Any], remote: dict[str, Any]
             if row.ai_job_id:
                 job = db.get(AiJob, row.ai_job_id)
                 if job:
+                    previous_status = job.status
                     job.progress = task.get("progress", job.progress)
                     job.updated_at = ts
                     if task["status"] == "completed":
                         job.status = "succeeded"
                         job.completed_at = ts
-                        job.output_json = json.dumps({"video_url": task.get("video_url")})
+                        job.output_json = {"video_url": task.get("video_url")}
                     else:
                         job.status = "failed"
                         job.error = task.get("error")
                         job.completed_at = ts
+                        cost = int(job.cost_points or 0)
+                        if previous_status not in {"failed", "cancelled"} and cost > 0:
+                            user = db.execute(select(User).where(User.id == job.user_id).with_for_update()).scalar_one_or_none()
+                            if user:
+                                user.points = int(user.points or 0) + cost
+                                db.add(
+                                    PointLedger(
+                                        id=uid("ledger"),
+                                        user_id=job.user_id,
+                                        amount=cost,
+                                        type="refund",
+                                        scene="生成失败退回",
+                                        description="镜头视频生成失败退回积分",
+                                        balance_after=user.points,
+                                        ai_job_id=job.id,
+                                        created_at=ts,
+                                    )
+                                )
         db.commit()
 
 

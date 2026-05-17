@@ -9,10 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from .. import storage
 from ..ai import image as ai_image
 from ..ai import llm as ai_llm
-from ..ai import video as ai_video
 from ..ai import voice as ai_voice
 from ..ai.errors import AIError
-from ..config import BACKEND_PUBLIC_URL, FFMPEG_PATH, POINT_RULES
+from ..config import FFMPEG_PATH, POINT_RULES
 from ..schemas import (
     AssetCreate,
     AssetGenerate,
@@ -35,7 +34,7 @@ from ..security import get_current_user
 from ..utils import comparable_asset_names, normalize_refs
 from ..storage_adapter import Storage
 from ..utils import uid
-from ..services.generation_guard import cost_for_shots, ensure_points
+from ..services.generation_guard import ensure_points
 from ..services import generation_service
 
 router = APIRouter(prefix="/api", tags=["content"])
@@ -47,36 +46,6 @@ def not_found(name: str):
 
 def ai_error(exc: AIError) -> HTTPException:
     return HTTPException(status_code=503, detail=exc.public_message)
-
-
-def provider_media_url(url: str | None) -> str | None:
-    if not url:
-        return None
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-    if url.startswith("/uploads/") and BACKEND_PUBLIC_URL:
-        return f"{BACKEND_PUBLIC_URL.rstrip('/')}{url}"
-    return None
-
-
-def find_reference_image(data: dict, shot: dict) -> str | None:
-    episode = next((item for item in data.get("episodes", []) if item["id"] == shot["episode_id"]), None)
-    if not episode:
-        return None
-    assets = [item for item in data.get("assets", []) if item.get("project_id") == episode["project_id"]]
-    character_names = {name.strip() for name in shot.get("characters", []) if name.strip()}
-    scene = (shot.get("scene") or "").strip()
-    candidates = []
-    if character_names:
-        candidates.extend(asset for asset in assets if asset.get("type") == "character" and asset.get("name") in character_names)
-    if scene:
-        candidates.extend(asset for asset in assets if asset.get("type") == "scene" and asset.get("name") == scene)
-    candidates.extend(asset for asset in assets if asset.get("type") in {"image", "scene", "character"})
-    for asset in candidates:
-        media_url = provider_media_url(asset.get("image"))
-        if media_url:
-            return media_url
-    return None
 
 
 def storyboard_missing_assets(ai_shots: list[dict], assets: list[dict]) -> list[dict]:
@@ -247,34 +216,18 @@ def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/shots/{shot_id}/generate-video")
 def generate_video_for_shot(shot_id: str, user: dict = Depends(get_current_user)):
-    shot, episode, assets = Storage.get_shot_with_context(user, shot_id)
-    ensure_points(user, cost_for_shots([shot], POINT_RULES["video_second"]))
-    data = {"episodes": [episode] if episode else [], "assets": assets}
     try:
-        provider_task_id = ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(data, shot), shot["duration"])
+        return generation_service.generate_video_for_shot(user, shot_id)
     except AIError as exc:
         raise ai_error(exc) from exc
-    return Storage.create_video_task(user, shot_id, provider_task_id, POINT_RULES["video_second"])
 
 
 @router.post("/episodes/{episode_id}/generate-videos")
 def generate_all_videos(episode_id: str, user: dict = Depends(get_current_user)):
-    context = Storage.episode_generation_context(user, episode_id)
-    if not context:
-        not_found("episode")
-    shots = context.get("shots", [])
-    if not shots:
-        not_found("shots")
-    ensure_points(user, cost_for_shots(shots, POINT_RULES["video_second"]))
-    data = {"episodes": [context["episode"]], "assets": context.get("assets", [])}
     try:
-        provider_tasks = {
-            shot["id"]: ai_video.create_video_task(shot.get("visual") or shot["title"], find_reference_image(data, shot), shot["duration"])
-            for shot in shots
-        }
+        return generation_service.generate_videos_for_episode(user, episode_id)
     except AIError as exc:
         raise ai_error(exc) from exc
-    return Storage.batch_create_video_tasks(user, episode_id, provider_tasks, POINT_RULES["video_second"])
 
 
 @router.get("/projects/{project_id}/assets")

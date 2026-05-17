@@ -4,8 +4,9 @@ from fastapi import HTTPException
 
 from ..ai import image as ai_image
 from ..ai import llm as ai_llm
+from ..ai import video as ai_video
 from ..ai.errors import AIError
-from ..config import POINT_RULES
+from ..config import BACKEND_PUBLIC_URL, POINT_RULES
 from ..schemas import OutlineGenerateRequest, StoryboardGenerateRequest
 from ..storage_adapter import Storage
 from ..utils import comparable_asset_names, now, uid
@@ -103,3 +104,75 @@ def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerate
         {"shot_count": len(shots), "generated_asset_count": len(generated_assets)},
     )
     return shots
+
+
+def _video_cost(shot: dict) -> int:
+    return max(1, int(shot.get("duration") or 1)) * POINT_RULES["video_second"]
+
+
+def _reference_image(assets: list[dict], shot: dict) -> str | None:
+    character_names = {name.strip() for name in shot.get("characters", []) if name.strip()}
+    scene = (shot.get("scene") or "").strip()
+    candidates = []
+    if character_names:
+        candidates.extend(asset for asset in assets if asset.get("type") == "character" and asset.get("name") in character_names)
+    if scene:
+        candidates.extend(asset for asset in assets if asset.get("type") == "scene" and asset.get("name") == scene)
+    candidates.extend(asset for asset in assets if asset.get("type") in {"image", "scene", "character"})
+    for asset in candidates:
+        media_url = _provider_media_url(asset.get("image"))
+        if media_url:
+            return media_url
+    return None
+
+
+def _provider_media_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if url.startswith("/uploads/") and BACKEND_PUBLIC_URL:
+        return f"{BACKEND_PUBLIC_URL.rstrip('/')}{url}"
+    return None
+
+
+def generate_video_for_shot(user: dict, shot_id: str) -> dict:
+    shot, episode, assets = Storage.get_shot_with_context(user, shot_id)
+    cost = _video_cost(shot)
+    job = Storage.start_paid_ai_job(
+        user,
+        cost,
+        "生成镜头视频",
+        f"生成镜头 #{shot['no']}《{shot['title']}》，{max(1, int(shot.get('duration') or 1))}s",
+        "video_shot",
+        "seedance",
+        project_id=episode.get("project_id") if episode else None,
+        episode_id=shot.get("episode_id"),
+        shot_id=shot.get("id"),
+    )
+    try:
+        provider_task_id = ai_video.create_video_task(
+            shot.get("visual") or shot["title"],
+            _reference_image(assets, shot),
+            shot["duration"],
+        )
+        return Storage.attach_video_task_to_job(user, shot_id, provider_task_id, job["id"])
+    except AIError as exc:
+        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
+        raise
+    except Exception as exc:
+        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
+        raise
+
+
+def generate_videos_for_episode(user: dict, episode_id: str) -> list[dict]:
+    context = Storage.episode_generation_context(user, episode_id)
+    if not context:
+        raise HTTPException(status_code=404, detail="episode not found")
+    shots = context.get("shots", [])
+    if not shots:
+        raise HTTPException(status_code=404, detail="shots not found")
+    tasks = []
+    for shot in shots:
+        tasks.append(generate_video_for_shot(user, shot["id"]))
+    return tasks

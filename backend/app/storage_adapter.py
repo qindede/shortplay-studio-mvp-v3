@@ -315,6 +315,13 @@ class Storage:
         return task
 
     @staticmethod
+    def attach_video_task_to_job(user: dict, shot_id: str, provider_task_id: str, job_id: str) -> dict:
+        task = db_store.attach_video_task_to_job(user, shot_id, provider_task_id, job_id, now())
+        if task is None:
+            not_found("shot")
+        return task
+
+    @staticmethod
     def batch_create_video_tasks(user: dict, episode_id: str, provider_tasks: dict[str, str], cost_per_second: int) -> list[dict]:
         tasks, error = db_store.batch_create_video_tasks(user, provider_tasks, cost_per_second, now())
         if error == "insufficient_points":
