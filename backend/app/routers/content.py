@@ -32,15 +32,15 @@ from ..schemas import (
     VoiceCloneRequest,
 )
 from ..security import get_current_user
-from ..services import (
-    comparable_asset_names,
-    normalize_refs,
-    not_found,
-)
+from ..utils import comparable_asset_names, normalize_refs
 from ..storage_adapter import Storage
 from ..utils import now, uid
 
 router = APIRouter(prefix="/api", tags=["content"])
+
+
+def not_found(name: str):
+    raise HTTPException(status_code=404, detail=f"{name} not found")
 
 
 def ai_error(exc: AIError) -> HTTPException:

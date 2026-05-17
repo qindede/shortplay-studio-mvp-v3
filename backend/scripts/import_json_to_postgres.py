@@ -17,22 +17,10 @@ from app.models import (
     VideoTask,
     VideoVersion,
 )
+from app.utils import parse_dt
 
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "db.json"
-
-
-def parse_dt(value):
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        return value
-    for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            return datetime.strptime(str(value), pattern)
-        except ValueError:
-            pass
-    return None
 
 
 def main() -> None:

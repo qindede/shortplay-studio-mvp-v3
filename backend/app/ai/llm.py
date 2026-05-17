@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import math
 from typing import Any
 
 from pydantic import ValidationError
@@ -158,7 +157,7 @@ def _storyboard_shot_count(episode: dict) -> int:
         seconds = int(duration)
     except (TypeError, ValueError):
         seconds = 30
-    return max(4, min(12, math.ceil(seconds / 5)))
+    return max(4, min(12, (seconds + 4) // 5))
 
 
 def _chat_text(system: str, user: str, timeout: float | None = None) -> str:

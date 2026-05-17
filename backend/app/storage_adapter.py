@@ -7,9 +7,11 @@ from fastapi import HTTPException
 
 from . import db_store
 from .config import POINT_RULES
-from .security import public_user
-from .services import not_found
 from .utils import now
+
+
+def not_found(name: str):
+    raise HTTPException(status_code=404, detail=f"{name} not found")
 
 
 class Storage:
@@ -194,7 +196,7 @@ class Storage:
 
     @staticmethod
     def update_asset(user: dict, asset_id: str, payload: Any) -> dict:
-        from .services import normalize_refs
+        from .utils import normalize_refs
         refs_raw = payload.model_dump(exclude_unset=True).get("references")
         refs = normalize_refs(refs_raw) if refs_raw is not None else None
         asset = db_store.update_asset(user, asset_id, payload, refs, now())

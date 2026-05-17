@@ -6,12 +6,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .utils import fix_database_url
+
 load_dotenv()
 
 AUTH_SECRET = os.getenv("SHORTPLAY_AUTH_SECRET", "shortplay-mvp-secret")
-DATABASE_URL = os.getenv("DATABASE_URL", "")
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+DATABASE_URL = fix_database_url(os.getenv("DATABASE_URL", ""))
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "")
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"

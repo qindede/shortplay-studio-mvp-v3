@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+import functools
+
+def require_db(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if SessionLocal is None:
+            raise RuntimeError("DATABASE_URL is not configured")
+        return func(*args, **kwargs)
+    return wrapper
+
+
 from collections import defaultdict
 from datetime import datetime
 import json
@@ -11,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import DEFAULT_USAGE, STATUS_LABEL, apply_usage_defaults
 from .db import SessionLocal
 from .security import verify_password
-from .utils import uid
+from .utils import uid, fmt_dt, parse_dt, public_user_dict
 from .models import (
     AiJob,
     Asset,
@@ -41,57 +52,52 @@ def _user_dict(row: User) -> dict[str, Any]:
         "points": row.points,
         "token": row.token or "",
         "usage": row.usage_json or {},
-        "created_at": _fmt(row.created_at),
-        "last_login": _fmt(row.last_login_at),
+        "created_at": fmt_dt(row.created_at),
+        "last_login": fmt_dt(row.last_login_at),
     }
 
 
+@require_db
 def find_user_by_token(token: str | None) -> dict[str, Any] | None:
-    if SessionLocal is None or not token:
-        return None
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.token == token))
         return _user_dict(user) if user else None
 
 
+@require_db
 def find_user_by_username(username: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        return None
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.username == username))
         return _user_dict(user) if user else None
 
 
+@require_db
 def update_user_login(user_id: str, token: str, last_login: str) -> None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if not user:
             return
         user.token = token
-        user.last_login_at = _dt(last_login)
+        user.last_login_at = parse_dt(last_login)
         db.commit()
 
 
+@require_db
 def login_user(username: str, password: str, token: str, last_login: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        return None
     with SessionLocal() as db:
         user = db.scalar(select(User).where(User.username == username, User.status == "active"))
         if not user or not verify_password(password, user.password_hash):
             return None
         user.token = token
-        user.last_login_at = _dt(last_login)
+        user.last_login_at = parse_dt(last_login)
         db.commit()
         db.refresh(user)
         return _user_dict(user)
 
 
+@require_db
 def register_user(username: str, display_name: str, password_hash: str, token: str, timestamp: str, bonus_points: int = 1000) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        return None
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         user = User(
             id=uid("user"),
@@ -127,9 +133,8 @@ def register_user(username: str, display_name: str, password_hash: str, token: s
         return _user_dict(user)
 
 
+@require_db
 def change_password(user_id: str, current_password: str, new_password: str) -> str:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if not user:
@@ -142,9 +147,8 @@ def change_password(user_id: str, current_password: str, new_password: str) -> s
         return "ok"
 
 
+@require_db
 def admin_summary() -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         row = db.execute(
             text(
@@ -162,17 +166,15 @@ def admin_summary() -> dict[str, Any]:
         return {key: int(row[key] or 0) for key in row.keys()}
 
 
+@require_db
 def admin_users() -> list[dict[str, Any]]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         users = db.scalars(select(User).order_by(User.created_at.desc()))
-        return [_public_user_dict(user) for user in users]
+        return [public_user_dict(user) for user in users]
 
 
+@require_db
 def admin_update_user(user_id: str, role: str | None, status: str | None) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if not user:
@@ -183,12 +185,11 @@ def admin_update_user(user_id: str, role: str | None, status: str | None) -> dic
             user.status = status
         db.commit()
         db.refresh(user)
-        return _public_user_dict(user)
+        return public_user_dict(user)
 
 
+@require_db
 def admin_reset_password(user_id: str, password_hash: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if not user:
@@ -197,12 +198,11 @@ def admin_reset_password(user_id: str, password_hash: str) -> dict[str, Any] | N
         user.token = None
         db.commit()
         db.refresh(user)
-        return _public_user_dict(user)
+        return public_user_dict(user)
 
 
+@require_db
 def admin_adjust_points(user_id: str, amount: int, reason: str, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if not user:
@@ -216,17 +216,16 @@ def admin_adjust_points(user_id: str, amount: int, reason: str, timestamp: str) 
             scene="管理员调整",
             description=reason,
             balance_after=user.points,
-            created_at=_dt(timestamp),
+            created_at=parse_dt(timestamp),
         )
         db.add(entry)
         db.commit()
         db.refresh(user)
-        return {"entry": _ledger_dict(entry, user), "user": _public_user_dict(user)}
+        return {"entry": _ledger_dict(entry, user), "user": public_user_dict(user)}
 
 
+@require_db
 def admin_point_ledger(user_id: str | None = None) -> list[dict[str, Any]]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         query = (
             select(PointLedger, User)
@@ -238,18 +237,6 @@ def admin_point_ledger(user_id: str | None = None) -> list[dict[str, Any]]:
             query = query.where(PointLedger.user_id == user_id)
         return [_ledger_dict(ledger, user) for ledger, user in db.execute(query).all()]
 
-
-def _public_user_dict(user: User) -> dict[str, Any]:
-    return {
-        "id": user.id,
-        "username": user.username,
-        "display_name": user.display_name or user.username,
-        "role": user.role or "user",
-        "status": user.status or "active",
-        "points": int(user.points or 0),
-        "created_at": _fmt(user.created_at),
-        "last_login": _fmt(user.last_login_at),
-    }
 
 
 def _ledger_dict(row: PointLedger, user: User | dict[str, Any]) -> dict[str, Any]:
@@ -266,7 +253,7 @@ def _ledger_dict(row: PointLedger, user: User | dict[str, Any]) -> dict[str, Any
         "description": row.description or "",
         "balance_after": row.balance_after,
         "ai_job_id": row.ai_job_id,
-        "created_at": _fmt(row.created_at),
+        "created_at": fmt_dt(row.created_at),
     }
 
 
@@ -282,7 +269,7 @@ def _project_dict(row: Project, episode_count: int = 0, asset_count: int = 0, ve
         "status_label": STATUS_LABEL.get(row.status, row.status),
         "cover": row.cover,
         "cover_image": row.cover_image_url,
-        "updated_at": _fmt(row.updated_at),
+        "updated_at": fmt_dt(row.updated_at),
         "episode_count": episode_count,
         "asset_count": asset_count,
         "version_count": version_count,
@@ -300,7 +287,7 @@ def _episode_dict(row: Episode, shot_count: int = 0, version_count: int = 0) -> 
         "duration_target": row.duration_target,
         "status": row.status,
         "status_label": STATUS_LABEL.get(row.status, row.status),
-        "updated_at": _fmt(row.updated_at),
+        "updated_at": fmt_dt(row.updated_at),
         "shot_count": shot_count,
         "version_count": version_count,
     }
@@ -318,7 +305,7 @@ def _shot_dict(row: Shot) -> dict[str, Any]:
         "scene": row.scene or "",
         "duration": row.duration,
         "status": row.status,
-        "updated_at": _fmt(row.updated_at),
+        "updated_at": fmt_dt(row.updated_at),
     }
 
 
@@ -338,7 +325,7 @@ def _asset_dict(row: Asset, refs: list[dict] | None = None) -> dict[str, Any]:
         "speaker_id": row.speaker_id,
         "voice_status": row.voice_status,
         "references": references,
-        "updated_at": _fmt(row.updated_at),
+        "updated_at": fmt_dt(row.updated_at),
     }
 
 
@@ -357,7 +344,7 @@ def _video_task_dict(row: VideoTask) -> dict[str, Any]:
         "preview_url": row.preview_url,
         "video_url": row.video_url,
         "error": row.error,
-        "updated_at": _fmt(row.updated_at),
+        "updated_at": fmt_dt(row.updated_at),
     }
 
 
@@ -374,7 +361,7 @@ def _video_version_dict(row: VideoVersion) -> dict[str, Any]:
         "theme": row.theme,
         "preview_url": row.preview_url,
         "video_url": row.video_url,
-        "created_at": _fmt(row.created_at),
+        "created_at": fmt_dt(row.created_at),
     }
 
 
@@ -434,6 +421,7 @@ def _add_ai_job(
     return job
 
 
+@require_db
 def consume_with_job(
     user_id: str,
     amount: int,
@@ -447,9 +435,7 @@ def consume_with_job(
     provider_task_id: str | None = None,
     **links,
 ) -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         try:
             _change_points(db, user_id, -amount, "consume", ledger_scene, ledger_description, ts)
@@ -460,9 +446,8 @@ def consume_with_job(
         return {"job": _ai_job_dict(job)}
 
 
+@require_db
 def episode_generation_context(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         episode = db.scalar(
             select(Episode)
@@ -482,6 +467,7 @@ def episode_generation_context(user: dict[str, Any], episode_id: str) -> dict[st
         }
 
 
+@require_db
 def save_storyboard(
     user: dict[str, Any],
     episode_id: str,
@@ -491,9 +477,7 @@ def save_storyboard(
     asset_cost: int,
     timestamp: str,
 ) -> list[dict[str, Any]] | dict[str, str] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         episode = db.scalar(
             select(Episode)
@@ -567,9 +551,8 @@ def save_storyboard(
         return new_shots
 
 
+@require_db
 def shot_generation_context(user: dict[str, Any], shot_id: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         shot = db.scalar(
             select(Shot)
@@ -590,10 +573,9 @@ def shot_generation_context(user: dict[str, Any], shot_id: str) -> dict[str, Any
         }
 
 
+@require_db
 def create_video_task(user: dict[str, Any], shot_id: str, provider_task_id: str, cost_per_second: int, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         shot = db.scalar(
             select(Shot)
@@ -636,10 +618,9 @@ def create_video_task(user: dict[str, Any], shot_id: str, provider_task_id: str,
         return _video_task_dict(task)
 
 
+@require_db
 def update_video_task_from_provider(task: dict[str, Any], remote: dict[str, Any]) -> None:
     """Update a video task dict (and its DB row) from remote provider data."""
-    if SessionLocal is None:
-        return
     updated = {k: v for k, v in remote.items() if v is not None}
     task.update(updated)
     ts = datetime.now()
@@ -673,9 +654,8 @@ def update_video_task_from_provider(task: dict[str, Any], remote: dict[str, Any]
         db.commit()
 
 
+@require_db
 def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         usage = apply_usage_defaults({**(user.get("usage") or {})})
@@ -928,9 +908,8 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
         }
 
 
+@require_db
 def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         row = db.execute(
@@ -1024,9 +1003,8 @@ def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] |
         }
 
 
+@require_db
 def create_shot(user: dict[str, Any], episode_id: str, payload: Any, shot_id: str, updated_at: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         row = db.execute(
@@ -1114,7 +1092,7 @@ def create_shot(user: dict[str, Any], episode_id: str, payload: Any, shot_id: st
                 "characters": json.dumps(payload.characters, ensure_ascii=False),
                 "scene": payload.scene,
                 "duration": payload.duration,
-                "updated_at": _dt(updated_at),
+                "updated_at": parse_dt(updated_at),
             },
         ).mappings().first()
         db.commit()
@@ -1123,9 +1101,8 @@ def create_shot(user: dict[str, Any], episode_id: str, payload: Any, shot_id: st
         return dict(row["shot"])
 
 
+@require_db
 def dashboard(user: dict[str, Any]) -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         usage = apply_usage_defaults({**(user.get("usage") or {})})
@@ -1158,9 +1135,8 @@ def dashboard(user: dict[str, Any]) -> dict[str, Any]:
         }
 
 
+@require_db
 def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         rows = db.execute(
@@ -1198,7 +1174,7 @@ def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
                 "status_label": STATUS_LABEL.get(row["status"], row["status"]),
                 "cover": row["cover"],
                 "cover_image": row["cover_image"],
-                "updated_at": _fmt(row["updated_at"]),
+                "updated_at": fmt_dt(row["updated_at"]),
                 "episode_count": int(row["episode_count"] or 0),
                 "asset_count": int(row["asset_count"] or 0),
                 "version_count": int(row["version_count"] or 0),
@@ -1207,9 +1183,8 @@ def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
         ]
 
 
+@require_db
 def list_episodes(user: dict[str, Any], project_id: str) -> list[dict[str, Any]] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         owned = db.scalar(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))
@@ -1248,7 +1223,7 @@ def list_episodes(user: dict[str, Any], project_id: str) -> list[dict[str, Any]]
                 "duration_target": row["duration_target"],
                 "status": row["status"],
                 "status_label": STATUS_LABEL.get(row["status"], row["status"]),
-                "updated_at": _fmt(row["updated_at"]),
+                "updated_at": fmt_dt(row["updated_at"]),
                 "shot_count": int(row["shot_count"] or 0),
                 "version_count": int(row["version_count"] or 0),
             }
@@ -1256,9 +1231,8 @@ def list_episodes(user: dict[str, Any], project_id: str) -> list[dict[str, Any]]
         ]
 
 
+@require_db
 def list_shots(user: dict[str, Any], episode_id: str) -> list[dict[str, Any]] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         owned = db.scalar(
@@ -1272,9 +1246,8 @@ def list_shots(user: dict[str, Any], episode_id: str) -> list[dict[str, Any]] | 
         return [_shot_dict(row) for row in rows]
 
 
+@require_db
 def list_assets(user: dict[str, Any], project_id: str, asset_type: str | None = None) -> list[dict[str, Any]] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         owned = db.scalar(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))
@@ -1305,9 +1278,8 @@ def list_assets(user: dict[str, Any], project_id: str, asset_type: str | None = 
         return [_asset_dict(asset, refs_by_asset.get(asset.id, [])) for asset in asset_rows]
 
 
+@require_db
 def list_video_versions(user: dict[str, Any], project_id: str, episode_id: str | None = None) -> list[dict[str, Any]] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     with SessionLocal() as db:
         owned = db.scalar(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))
@@ -1320,9 +1292,8 @@ def list_video_versions(user: dict[str, Any], project_id: str, episode_id: str |
         return [_video_version_dict(row) for row in rows]
 
 
+@require_db
 def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
 
     safe_page = max(1, page)
     safe_size = min(100, max(1, page_size))
@@ -1349,7 +1320,7 @@ def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> di
                     "description": row.description or "",
                     "balance_after": row.balance_after,
                     "ai_job_id": row.ai_job_id,
-                    "created_at": _fmt(row.created_at),
+                    "created_at": fmt_dt(row.created_at),
                 }
                 for row in rows
             ],
@@ -1357,9 +1328,8 @@ def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> di
         }
 
 
+@require_db
 def get_project(user: dict[str, Any], project_id: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         project = db.scalar(
             select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"])
@@ -1372,10 +1342,9 @@ def get_project(user: dict[str, Any], project_id: str) -> dict[str, Any] | None:
         return _project_dict(project, episode_count, asset_count, version_count)
 
 
+@require_db
 def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     project = Project(
         id=uid("proj"),
         owner_user_id=user["id"],
@@ -1407,9 +1376,8 @@ def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[s
         return _project_dict(project, len(payload.episodes), 0, 0) | {"owner": user.get("display_name", "")}
 
 
+@require_db
 def update_project(user: dict[str, Any], project_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not project:
@@ -1422,14 +1390,13 @@ def update_project(user: dict[str, Any], project_id: str, payload: Any, timestam
             project.description = updates["description"]
         if "status" in updates:
             project.status = updates["status"]
-        project.updated_at = _dt(timestamp)
+        project.updated_at = parse_dt(timestamp)
         db.commit()
         return get_project(user, project_id)
 
 
+@require_db
 def delete_project(user: dict[str, Any], project_id: str) -> bool:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not project:
@@ -1439,9 +1406,8 @@ def delete_project(user: dict[str, Any], project_id: str) -> bool:
         return True
 
 
+@require_db
 def get_episode(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         episode = db.scalar(
             select(Episode)
@@ -1455,10 +1421,9 @@ def get_episode(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
         return _episode_dict(episode, shot_count, version_count)
 
 
+@require_db
 def create_episode(user: dict[str, Any], project_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not project:
@@ -1481,10 +1446,9 @@ def create_episode(user: dict[str, Any], project_id: str, payload: Any, timestam
         return _episode_dict(episode)
 
 
+@require_db
 def update_episode(user: dict[str, Any], episode_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         episode = db.scalar(
             select(Episode)
@@ -1505,9 +1469,8 @@ def update_episode(user: dict[str, Any], episode_id: str, payload: Any, timestam
         return get_episode(user, episode_id)
 
 
+@require_db
 def delete_episode(user: dict[str, Any], episode_id: str, timestamp: str) -> tuple[bool, str | None]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         episode = db.scalar(
             select(Episode)
@@ -1523,15 +1486,14 @@ def delete_episode(user: dict[str, Any], episode_id: str, timestamp: str) -> tup
             item.no -= 1
         project = db.get(Project, project_id)
         if project:
-            project.updated_at = _dt(timestamp)
+            project.updated_at = parse_dt(timestamp)
         db.commit()
         return True, project_id
 
 
+@require_db
 def patch_shot(user: dict[str, Any], shot_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         shot = db.scalar(
             select(Shot)
@@ -1563,9 +1525,8 @@ def patch_shot(user: dict[str, Any], shot_id: str, payload: Any, timestamp: str)
         return _shot_dict(shot)
 
 
+@require_db
 def delete_shot(user: dict[str, Any], shot_id: str, timestamp: str) -> bool:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         shot = db.scalar(
             select(Shot)
@@ -1582,7 +1543,7 @@ def delete_shot(user: dict[str, Any], shot_id: str, timestamp: str) -> bool:
             item.no -= 1
         episode = db.get(Episode, episode_id)
         if episode:
-            episode.updated_at = _dt(timestamp)
+            episode.updated_at = parse_dt(timestamp)
             project = db.get(Project, episode.project_id)
             if project:
                 project.updated_at = episode.updated_at
@@ -1590,10 +1551,9 @@ def delete_shot(user: dict[str, Any], shot_id: str, timestamp: str) -> bool:
         return True
 
 
+@require_db
 def create_asset(user: dict[str, Any], project_id: str, payload: Any, refs: list[dict], cost: int, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     visual_asset = payload.type in {"character", "scene", "image"}
     with SessionLocal() as db:
         project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
@@ -1643,10 +1603,9 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any, refs: list
         return _asset_dict(asset, refs)
 
 
+@require_db
 def generate_asset(user: dict[str, Any], project_id: str, payload: Any, generated_url: str | None, refs: list[dict], cost: int, provider: str, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     visual_asset = payload.type in {"character", "scene", "image"}
     with SessionLocal() as db:
         project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
@@ -1686,10 +1645,9 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any, generate
         return _asset_dict(asset, refs)
 
 
+@require_db
 def update_asset(user: dict[str, Any], asset_id: str, payload: Any, refs: list[dict] | None, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         asset = db.scalar(
             select(Asset)
@@ -1743,9 +1701,8 @@ def update_asset(user: dict[str, Any], asset_id: str, payload: Any, refs: list[d
         return result
 
 
+@require_db
 def delete_asset(user: dict[str, Any], asset_id: str) -> bool:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         asset = db.scalar(
             select(Asset)
@@ -1759,9 +1716,8 @@ def delete_asset(user: dict[str, Any], asset_id: str) -> bool:
         return True
 
 
+@require_db
 def delete_video_version(user: dict[str, Any], version_id: str) -> bool:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         version = db.scalar(
             select(VideoVersion)
@@ -1775,9 +1731,8 @@ def delete_video_version(user: dict[str, Any], version_id: str) -> bool:
         return True
 
 
+@require_db
 def get_asset(user: dict[str, Any], asset_id: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         asset = db.scalar(
             select(Asset)
@@ -1793,10 +1748,9 @@ def get_asset(user: dict[str, Any], asset_id: str) -> dict[str, Any] | None:
         return _asset_dict(asset, refs)
 
 
+@require_db
 def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, Any], cost: int, timestamp: str, consume: bool = True) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         asset = db.scalar(
             select(Asset)
@@ -1842,10 +1796,9 @@ def compose_context(user: dict[str, Any], episode_id: str) -> dict[str, Any] | N
     return context
 
 
+@require_db
 def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, video_url: str, cost: int, timestamp: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
-    ts = _dt(timestamp)
+    ts = parse_dt(timestamp)
     with SessionLocal() as db:
         episode = db.scalar(
             select(Episode)
@@ -1890,9 +1843,8 @@ def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, v
         return _video_version_dict(version)
 
 
+@require_db
 def usage(user: dict[str, Any]) -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         db_user = db.get(User, user["id"])
         usage_data = apply_usage_defaults(dict((db_user.usage_json if db_user else user.get("usage")) or {}))
@@ -1900,9 +1852,8 @@ def usage(user: dict[str, Any]) -> dict[str, Any]:
         return usage_data
 
 
+@require_db
 def get_ai_job(user: dict[str, Any], job_id: str) -> dict[str, Any] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         job = db.get(AiJob, job_id)
         if not job:
@@ -1912,9 +1863,8 @@ def get_ai_job(user: dict[str, Any], job_id: str) -> dict[str, Any] | None:
         return _ai_job_dict(job)
 
 
+@require_db
 def list_project_ai_jobs(user: dict[str, Any], project_id: str) -> list[dict[str, Any]] | None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         owned = db.scalar(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not owned:
@@ -1940,35 +1890,16 @@ def _ai_job_dict(job: AiJob) -> dict[str, Any]:
         "output_json": job.output_json or {},
         "error": job.error,
         "cost_points": job.cost_points,
-        "created_at": _fmt(job.created_at),
-        "updated_at": _fmt(job.updated_at),
-        "completed_at": _fmt(job.completed_at),
+        "created_at": fmt_dt(job.created_at),
+        "updated_at": fmt_dt(job.updated_at),
+        "completed_at": fmt_dt(job.completed_at),
     }
 
 
-def _fmt(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    return value or ""
 
-
-def _dt(value: Any) -> datetime | None:
-    if isinstance(value, datetime):
-        return value
-    if not value:
-        return None
-    for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            return datetime.strptime(str(value), pattern)
-        except ValueError:
-            pass
-    return None
-
-
+@require_db
 def _ensure_seed_data() -> None:
     """Create default users and load seed data if the database is empty."""
-    if SessionLocal is None:
-        return
     with SessionLocal() as db:
         has_users = db.scalar(select(User.id).limit(1))
         if has_users:
@@ -1990,9 +1921,8 @@ def _ensure_seed_data() -> None:
     save_data(seed_data())
 
 
+@require_db
 def load_data() -> dict[str, Any]:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     _ensure_seed_data()
     with SessionLocal() as db:
         users = list(db.scalars(select(User)))
@@ -2009,7 +1939,7 @@ def load_data() -> dict[str, Any]:
                 "status": row.status,
                 "cover": row.cover,
                 "cover_image": row.cover_image_url,
-                "updated_at": _fmt(row.updated_at),
+                "updated_at": fmt_dt(row.updated_at),
             }
             for row in db.scalars(select(Project))
         ]
@@ -2023,7 +1953,7 @@ def load_data() -> dict[str, Any]:
                 "script": row.script or "",
                 "duration_target": row.duration_target,
                 "status": row.status,
-                "updated_at": _fmt(row.updated_at),
+                "updated_at": fmt_dt(row.updated_at),
             }
             for row in db.scalars(select(Episode))
         ]
@@ -2039,7 +1969,7 @@ def load_data() -> dict[str, Any]:
                 "scene": row.scene or "",
                 "duration": row.duration,
                 "status": row.status,
-                "updated_at": _fmt(row.updated_at),
+                "updated_at": fmt_dt(row.updated_at),
             }
             for row in db.scalars(select(Shot))
         ]
@@ -2070,7 +2000,7 @@ def load_data() -> dict[str, Any]:
                 "speaker_id": row.speaker_id,
                 "voice_status": row.voice_status,
                 "references": refs_by_asset.get(row.id, []),
-                "updated_at": _fmt(row.updated_at),
+                "updated_at": fmt_dt(row.updated_at),
             }
             for row in db.scalars(select(Asset))
         ]
@@ -2089,7 +2019,7 @@ def load_data() -> dict[str, Any]:
                 "preview_url": row.preview_url,
                 "video_url": row.video_url,
                 "error": row.error,
-                "updated_at": _fmt(row.updated_at),
+                "updated_at": fmt_dt(row.updated_at),
             }
             for row in db.scalars(select(VideoTask))
         ]
@@ -2106,7 +2036,7 @@ def load_data() -> dict[str, Any]:
                 "theme": row.theme,
                 "preview_url": row.preview_url,
                 "video_url": row.video_url,
-                "created_at": _fmt(row.created_at),
+                "created_at": fmt_dt(row.created_at),
             }
             for row in db.scalars(select(VideoVersion))
         ]
@@ -2125,7 +2055,7 @@ def load_data() -> dict[str, Any]:
                     "description": row.description or "",
                     "balance_after": row.balance_after,
                     "ai_job_id": row.ai_job_id,
-                    "created_at": _fmt(row.created_at),
+                    "created_at": fmt_dt(row.created_at),
                 }
             )
         ai_jobs = [
@@ -2145,9 +2075,9 @@ def load_data() -> dict[str, Any]:
                 "output_json": row.output_json or {},
                 "error": row.error,
                 "cost_points": row.cost_points,
-                "created_at": _fmt(row.created_at),
-                "updated_at": _fmt(row.updated_at),
-                "completed_at": _fmt(row.completed_at),
+                "created_at": fmt_dt(row.created_at),
+                "updated_at": fmt_dt(row.updated_at),
+                "completed_at": fmt_dt(row.completed_at),
             }
             for row in db.scalars(select(AiJob).order_by(AiJob.created_at.desc()))
         ]
@@ -2162,8 +2092,8 @@ def load_data() -> dict[str, Any]:
                 "points": row.points,
                 "token": row.token or "",
                 "usage": row.usage_json or {},
-                "created_at": _fmt(row.created_at),
-                "last_login": _fmt(row.last_login_at),
+                "created_at": fmt_dt(row.created_at),
+                "last_login": fmt_dt(row.last_login_at),
             }
             for row in users
         ]
@@ -2188,9 +2118,8 @@ def load_data() -> dict[str, Any]:
         }
 
 
+@require_db
 def save_data(data: dict[str, Any]) -> None:
-    if SessionLocal is None:
-        raise RuntimeError("DATABASE_URL is not configured")
     with SessionLocal() as db:
         for model in [PointLedger, VideoVersion, VideoTask, AiJob, AssetReference, Asset, Shot, Episode, Project]:
             db.execute(delete(model))
@@ -2208,8 +2137,8 @@ def save_data(data: dict[str, Any]) -> None:
                     points=int(item.get("points", 0)),
                     token=item.get("token") or None,
                     usage_json=item.get("usage", {}),
-                    created_at=_dt(item.get("created_at")),
-                    last_login_at=_dt(item.get("last_login")),
+                    created_at=parse_dt(item.get("created_at")),
+                    last_login_at=parse_dt(item.get("last_login")),
                 )
             )
         db.flush()
@@ -2224,7 +2153,7 @@ def save_data(data: dict[str, Any]) -> None:
                     status=item.get("status", "draft"),
                     cover=item.get("cover"),
                     cover_image_url=item.get("cover_image") or item.get("cover_image_url"),
-                    updated_at=_dt(item.get("updated_at")),
+                    updated_at=parse_dt(item.get("updated_at")),
                 )
             )
         db.flush()
@@ -2239,7 +2168,7 @@ def save_data(data: dict[str, Any]) -> None:
                     script=item.get("script", ""),
                     duration_target=int(item.get("duration_target", 30)),
                     status=item.get("status", "draft"),
-                    updated_at=_dt(item.get("updated_at")),
+                    updated_at=parse_dt(item.get("updated_at")),
                 )
             )
         db.flush()
@@ -2256,7 +2185,7 @@ def save_data(data: dict[str, Any]) -> None:
                     scene=item.get("scene", ""),
                     duration=int(item.get("duration", 3)),
                     status=item.get("status", "pending"),
-                    updated_at=_dt(item.get("updated_at")),
+                    updated_at=parse_dt(item.get("updated_at")),
                 )
             )
         db.flush()
@@ -2276,7 +2205,7 @@ def save_data(data: dict[str, Any]) -> None:
                     voice_status=item.get("voice_status"),
                     generation_prompt=item.get("generation_prompt"),
                     provider_meta=item.get("provider_meta", {}),
-                    updated_at=_dt(item.get("updated_at")),
+                    updated_at=parse_dt(item.get("updated_at")),
                 )
             )
             for index, ref in enumerate(item.get("references", []) or []):
@@ -2310,9 +2239,9 @@ def save_data(data: dict[str, Any]) -> None:
                     output_json=item.get("output_json", {}),
                     error=item.get("error"),
                     cost_points=int(item.get("cost_points", 0)),
-                    created_at=_dt(item.get("created_at")),
-                    updated_at=_dt(item.get("updated_at")),
-                    completed_at=_dt(item.get("completed_at")),
+                    created_at=parse_dt(item.get("created_at")),
+                    updated_at=parse_dt(item.get("updated_at")),
+                    completed_at=parse_dt(item.get("completed_at")),
                 )
             )
         db.flush()
@@ -2332,7 +2261,7 @@ def save_data(data: dict[str, Any]) -> None:
                     preview_url=item.get("preview_url"),
                     video_url=item.get("video_url"),
                     error=item.get("error"),
-                    updated_at=_dt(item.get("updated_at")),
+                    updated_at=parse_dt(item.get("updated_at")),
                 )
             )
         for item in data.get("video_versions", []):
@@ -2349,7 +2278,7 @@ def save_data(data: dict[str, Any]) -> None:
                     theme=item.get("theme"),
                     preview_url=item.get("preview_url"),
                     video_url=item.get("video_url"),
-                    created_at=_dt(item.get("created_at")),
+                    created_at=parse_dt(item.get("created_at")),
                 )
             )
         for item in data.get("point_ledger", []):
@@ -2363,7 +2292,7 @@ def save_data(data: dict[str, Any]) -> None:
                     description=item.get("description", ""),
                     balance_after=int(item.get("balance_after", 0)),
                     ai_job_id=item.get("ai_job_id"),
-                    created_at=_dt(item.get("created_at")),
+                    created_at=parse_dt(item.get("created_at")),
                 )
             )
         db.commit()

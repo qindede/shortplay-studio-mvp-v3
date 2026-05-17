@@ -7,6 +7,7 @@ import bcrypt
 from fastapi import Depends, Header, HTTPException
 
 from .config import AUTH_SECRET
+from .utils import public_user_dict
 
 
 def hash_password(password: str) -> str:
@@ -20,25 +21,6 @@ def verify_password(password: str, password_hash: str) -> bool:
     return legacy == password_hash
 
 
-def public_user(user: dict) -> dict:
-    return {
-        "id": user["id"],
-        "username": user["username"],
-        "display_name": user.get("display_name") or user["username"],
-        "role": user.get("role", "user"),
-        "status": user.get("status", "active"),
-        "points": int(user.get("points", 0)),
-        "created_at": user.get("created_at", ""),
-        "last_login": user.get("last_login", ""),
-    }
-
-
-def find_user_by_token(data: dict, token: str | None) -> dict | None:
-    if not token:
-        return None
-    return next((u for u in data.get("users", []) if u.get("token") == token), None)
-
-
 def get_current_user(x_user_token: Annotated[str | None, Header(alias="X-User-Token")] = None) -> dict:
     from .storage_adapter import Storage
     user = Storage.find_user_by_token(x_user_token)
@@ -46,7 +28,7 @@ def get_current_user(x_user_token: Annotated[str | None, Header(alias="X-User-To
         raise HTTPException(status_code=401, detail="未登录或登录已失效")
     if user.get("status") != "active":
         raise HTTPException(status_code=403, detail="账号已被禁用")
-    return public_user(user)
+    return public_user_dict(user)
 
 
 def require_admin(user: dict = Depends(get_current_user)) -> dict:

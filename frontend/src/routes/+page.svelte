@@ -753,15 +753,6 @@
     activePage = 'video';
   }
 
-  async function batchGenerateVideos() {
-    const episodeToRender = selectedEpisode;
-    if (!episodeToRender) return;
-
-    await safeRun(async () => {
-      await runEpisodeVideoGeneration(episodeToRender);
-    });
-  }
-
   async function regenerateVideo(shotId: string) {
     const episode = selectedEpisode;
     if (!episode) return;

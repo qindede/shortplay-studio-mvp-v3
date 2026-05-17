@@ -112,7 +112,6 @@
           </div>
           <div class="panel-actions">
             <button class="btn btn-secondary" on:click={openShotCreator}>新增分镜</button>
-            <!-- <button class="btn btn-primary" on:click={batchGenerateVideos}>批量生成视频</button> -->
           </div>
         </div>
 
