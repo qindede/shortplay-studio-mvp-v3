@@ -206,6 +206,7 @@ class Storage:
 
     @staticmethod
     def update_voice_clone(user: dict, asset_id: str, result: dict, cost: int = 0, consume: bool = True, create_job: bool = False) -> dict:
+        # Legacy paid path when consume=True. New generation flows must use generation_service.
         updated = db_store.update_voice_clone(user, asset_id, result, now(), consume=consume)
         if updated is None:
             not_found("asset")
@@ -278,6 +279,7 @@ class Storage:
 
     @staticmethod
     def save_storyboard(user: dict, episode_id: str, ai_shots: list[dict], generated_assets: list[dict], storyboard_cost: int, asset_cost: int) -> list[dict]:
+        # Legacy paid path. New generation flows must use generation_service.
         result = db_store.save_storyboard(user, episode_id, ai_shots, generated_assets, storyboard_cost, asset_cost, now())
         if result is None:
             not_found("episode")
@@ -303,6 +305,7 @@ class Storage:
 
     @staticmethod
     def generate_asset(user: dict, project_id: str, payload: Any, generated_url: str | None, refs: list[dict], visual_asset: bool) -> dict:
+        # Legacy paid path. New generation flows must use generation_service.
         cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
         provider = "seedream" if visual_asset else "manual"
         asset = db_store.generate_asset(user, project_id, payload, generated_url, refs, cost, provider, now())
@@ -321,6 +324,7 @@ class Storage:
 
     @staticmethod
     def create_video_task(user: dict, shot_id: str, provider_task_id: str, cost_per_second: int) -> dict:
+        # Legacy paid path. New generation flows must use generation_service.
         task = db_store.create_video_task(user, shot_id, provider_task_id, cost_per_second, now())
         if task is None:
             not_found("shot")
@@ -337,6 +341,7 @@ class Storage:
 
     @staticmethod
     def batch_create_video_tasks(user: dict, episode_id: str, provider_tasks: dict[str, str], cost_per_second: int) -> list[dict]:
+        # Legacy paid path. New generation flows must use generation_service.
         tasks, error = db_store.batch_create_video_tasks(user, provider_tasks, cost_per_second, now())
         if error == "insufficient_points":
             raise HTTPException(status_code=402, detail="积分不足")
@@ -346,6 +351,7 @@ class Storage:
 
     @staticmethod
     def save_composed_version(user: dict, episode_id: str, payload: Any, video_url: str, cost: int) -> dict:
+        # Legacy paid path. New generation flows must use generation_service.
         version = db_store.save_composed_version(user, episode_id, payload, video_url, cost, now())
         if isinstance(version, dict) and version.get("error") == "insufficient_points":
             raise HTTPException(status_code=402, detail="积分不足")
