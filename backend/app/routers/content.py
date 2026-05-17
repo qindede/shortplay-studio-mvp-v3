@@ -34,8 +34,9 @@ from ..schemas import (
 from ..security import get_current_user
 from ..utils import comparable_asset_names, normalize_refs
 from ..storage_adapter import Storage
-from ..utils import now, uid
+from ..utils import uid
 from ..services.generation_guard import cost_for_shots, ensure_points
+from ..services import generation_service
 
 router = APIRouter(prefix="/api", tags=["content"])
 
@@ -113,32 +114,6 @@ def storyboard_missing_assets(ai_shots: list[dict], assets: list[dict]) -> list[
     return missing
 
 
-def create_generated_asset_payload(project_id: str, payload: dict, generated_url: str | None) -> dict:
-    visual_asset = payload["type"] in {"character", "scene", "image"}
-    ts = now()
-    refs = [{
-        "id": uid("ref"),
-        "type": "image" if visual_asset else "audio",
-        "name": f"AI 生成 - {payload['name']}",
-        "url": generated_url,
-        "note": payload["prompt"],
-    }]
-    return {
-        "id": uid("asset"),
-        "project_id": project_id,
-        "type": payload["type"],
-        "name": payload["name"],
-        "description": payload.get("description", ""),
-        "ref_count": len(refs),
-        "initial": payload["name"][:1],
-        "image": generated_url,
-        "voice": None,
-        "voice_url": None,
-        "references": refs,
-        "updated_at": ts,
-    }
-
-
 @router.get("/dashboard")
 def dashboard(user: dict = Depends(get_current_user)):
     return Storage.dashboard(user)
@@ -169,12 +144,10 @@ def create_project(payload: ProjectCreate, user: dict = Depends(get_current_user
 
 @router.post("/projects/generate-outline", response_model=OutlineGenerateResponse)
 def generate_project_outline(payload: OutlineGenerateRequest, user: dict = Depends(get_current_user)):
-    ensure_points(user, POINT_RULES["outline"])
     try:
-        episodes = ai_llm.generate_outline(payload)
+        return generation_service.generate_project_outline(user, payload)
     except AIError as exc:
         raise ai_error(exc) from exc
-    return Storage.generate_project_outline(user, episodes, POINT_RULES["outline"], payload.name)
 
 
 @router.get("/projects/{project_id}")
@@ -251,31 +224,10 @@ def prepare_storyboard(episode_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("/episodes/{episode_id}/generate-storyboard")
 def generate_storyboard(episode_id: str, payload: StoryboardGenerateRequest | None = None, user: dict = Depends(get_current_user)):
-    context = Storage.episode_generation_context(user, episode_id)
-    if not context:
-        not_found("episode")
-    existing_assets = context["assets"]
-    confirmed_assets = [item.model_dump() for item in (payload.confirmed_assets if payload else [])]
-    existing_names = {
-        item
-        for asset in existing_assets
-        for item in comparable_asset_names(asset)
-        if asset.get("type") in {"character", "scene"}
-    }
-    assets_to_generate = [item for item in confirmed_assets if item["name"].strip() not in existing_names]
-    ensure_points(user, POINT_RULES["storyboard"] + len(assets_to_generate) * POINT_RULES["image_asset"])
-    generated_assets: list[dict] = []
-    for item in assets_to_generate:
-        try:
-            generated_url = ai_image.generate_image(item["prompt"])
-        except AIError as exc:
-            raise ai_error(exc) from exc
-        generated_assets.append(create_generated_asset_payload(context["project"]["id"], item, generated_url))
     try:
-        ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], existing_assets + generated_assets)
+        return generation_service.generate_storyboard(user, episode_id, payload)
     except AIError as exc:
         raise ai_error(exc) from exc
-    return Storage.save_storyboard(user, episode_id, ai_shots, generated_assets, POINT_RULES["storyboard"], POINT_RULES["image_asset"])
 
 
 @router.patch("/shots/{shot_id}")

@@ -332,6 +332,85 @@ def consume_with_job(
 
 
 @require_db
+def start_paid_ai_job(
+    user_id: str,
+    amount: int,
+    ledger_scene: str,
+    ledger_description: str,
+    job_type: str,
+    provider: str,
+    timestamp: str,
+    **links,
+) -> dict[str, Any]:
+    ts = parse_dt(timestamp)
+    with SessionLocal() as db:
+        try:
+            ledger = _change_points(db, user_id, -amount, "consume", ledger_scene, ledger_description, ts)
+        except ValueError as exc:
+            return {"error": str(exc)}
+        job = _add_ai_job(db, user_id, job_type, provider, amount, ts, status="running", progress=0, **links)
+        db.flush()
+        ledger.ai_job_id = job.id
+        db.commit()
+        return {"job": _ai_job_dict(job)}
+
+
+@require_db
+def complete_ai_job(job_id: str, timestamp: str, output: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    ts = parse_dt(timestamp)
+    with SessionLocal() as db:
+        job = db.get(AiJob, job_id)
+        if not job:
+            return None
+        job.status = "succeeded"
+        job.progress = 100
+        job.error = None
+        job.output_json = output or {}
+        job.updated_at = ts
+        job.completed_at = ts
+        db.commit()
+        db.refresh(job)
+        return _ai_job_dict(job)
+
+
+@require_db
+def fail_ai_job_with_refund(job_id: str, error: str, timestamp: str) -> dict[str, Any] | None:
+    ts = parse_dt(timestamp)
+    with SessionLocal() as db:
+        job = db.get(AiJob, job_id)
+        if not job:
+            return None
+        previous_status = job.status
+        job.status = "failed"
+        job.progress = 100
+        job.error = error
+        job.updated_at = ts
+        job.completed_at = ts
+        cost = int(job.cost_points or 0)
+        should_refund = previous_status not in {"failed", "cancelled"} and cost > 0
+        if should_refund:
+            user = db.execute(select(User).where(User.id == job.user_id).with_for_update()).scalar_one_or_none()
+            if user:
+                user.points = int(user.points or 0) + cost
+                db.add(
+                    PointLedger(
+                        id=uid("ledger"),
+                        user_id=job.user_id,
+                        amount=cost,
+                        type="refund",
+                        scene="生成失败退回",
+                        description=f"{job.type} 生成失败退回积分",
+                        balance_after=user.points,
+                        ai_job_id=job.id,
+                        created_at=ts,
+                    )
+                )
+        db.commit()
+        db.refresh(job)
+        return _ai_job_dict(job)
+
+
+@require_db
 def episode_generation_context(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
     with SessionLocal() as db:
         episode = db.scalar(
@@ -367,6 +446,7 @@ def save_storyboard(
     storyboard_cost: int,
     asset_cost: int,
     timestamp: str,
+    charge: bool = True,
 ) -> list[dict[str, Any]] | dict[str, str] | None:
     ts = parse_dt(timestamp)
     with SessionLocal() as db:
@@ -389,7 +469,8 @@ def save_storyboard(
                 )
                 if duplicate:
                     continue
-                _change_points(db, user["id"], -asset_cost, "consume", "AI 生成素材", f"AI 生成素材《{item['name']}》", ts)
+                if charge:
+                    _change_points(db, user["id"], -asset_cost, "consume", "AI 生成素材", f"AI 生成素材《{item['name']}》", ts)
                 asset = Asset(
                     id=item["id"],
                     project_id=episode.project_id,
@@ -407,10 +488,12 @@ def save_storyboard(
                 db.flush()
                 for index, ref in enumerate(item.get("references", []) or []):
                     db.add(AssetReference(id=ref.get("id") or uid("ref"), asset_id=asset.id, type=ref.get("type", "image"), name=ref.get("name", f"参考 {index + 1}"), url=ref.get("url"), note=ref.get("note"), sort_order=index))
-                _add_ai_job(db, user["id"], "image_asset", "seedream", asset_cost, ts, project_id=episode.project_id, asset_id=asset.id)
+                if charge:
+                    _add_ai_job(db, user["id"], "image_asset", "seedream", asset_cost, ts, project_id=episode.project_id, asset_id=asset.id)
 
-            _change_points(db, user["id"], -storyboard_cost, "consume", "生成分镜", f"生成/更新《{episode.title}》分镜", ts)
-            _add_ai_job(db, user["id"], "storyboard", "minimax", storyboard_cost, ts, episode_id=episode_id, project_id=episode.project_id)
+            if charge:
+                _change_points(db, user["id"], -storyboard_cost, "consume", "生成分镜", f"生成/更新《{episode.title}》分镜", ts)
+                _add_ai_job(db, user["id"], "storyboard", "minimax", storyboard_cost, ts, episode_id=episode_id, project_id=episode.project_id)
         except ValueError as exc:
             db.rollback()
             return {"error": str(exc)}

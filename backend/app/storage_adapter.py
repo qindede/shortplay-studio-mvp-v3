@@ -249,14 +249,25 @@ class Storage:
     # ── COMPLEX WRITE ────────────────────────────────────────────────────
 
     @staticmethod
-    def generate_project_outline(user: dict, episodes: list, cost: int, project_name: str) -> dict:
-        result = db_store.consume_with_job(
-            user["id"], cost, "生成短剧大纲",
-            f"智能生成《{project_name}》短剧大纲", "outline", "minimax", now(),
-        )
+    def start_paid_ai_job(user: dict, cost: int, scene: str, description: str, job_type: str, provider: str, **links) -> dict:
+        result = db_store.start_paid_ai_job(user["id"], cost, scene, description, job_type, provider, now(), **links)
         if result.get("error") == "insufficient_points":
             raise HTTPException(status_code=402, detail=f"积分不足：本次需要 {cost}")
-        return {"cost": cost, "episodes": episodes}
+        return result["job"]
+
+    @staticmethod
+    def complete_ai_job(job_id: str, output: dict | None = None) -> dict:
+        job = db_store.complete_ai_job(job_id, now(), output)
+        if not job:
+            not_found("ai job")
+        return job
+
+    @staticmethod
+    def fail_ai_job_with_refund(job_id: str, error: str) -> dict:
+        job = db_store.fail_ai_job_with_refund(job_id, error, now())
+        if not job:
+            not_found("ai job")
+        return job
 
     @staticmethod
     def save_storyboard(user: dict, episode_id: str, ai_shots: list[dict], generated_assets: list[dict], storyboard_cost: int, asset_cost: int) -> list[dict]:
@@ -265,6 +276,22 @@ class Storage:
             not_found("episode")
         if isinstance(result, dict) and result.get("error") == "insufficient_points":
             raise HTTPException(status_code=402, detail="积分不足")
+        return result
+
+    @staticmethod
+    def save_storyboard_without_charge(user: dict, episode_id: str, ai_shots: list[dict], generated_assets: list[dict]) -> list[dict]:
+        result = db_store.save_storyboard(
+            user,
+            episode_id,
+            ai_shots,
+            generated_assets,
+            POINT_RULES["storyboard"],
+            POINT_RULES["image_asset"],
+            now(),
+            charge=False,
+        )
+        if result is None:
+            not_found("episode")
         return result
 
     @staticmethod
