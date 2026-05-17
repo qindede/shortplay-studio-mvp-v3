@@ -8,7 +8,7 @@ from ...db import SessionLocal, require_db
 from ...models import PointLedger, User
 from ...serializers import _ledger_dict
 from ...utils import parse_dt, public_user_dict
-from ..points.queries import change_points
+from ..points.db import change_points
 
 
 @require_db

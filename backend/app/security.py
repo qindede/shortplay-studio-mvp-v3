@@ -19,7 +19,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def get_current_user(x_user_token: Annotated[str | None, Header(alias="X-User-Token")] = None) -> dict:
-    from .features.auth.queries import find_user_by_token
+    from .features.auth.db import find_user_by_token
     user = find_user_by_token(x_user_token)
     if not user:
         raise HTTPException(status_code=401, detail="未登录或登录已失效")

@@ -60,7 +60,7 @@ def consume_with_job(
     **links,
 ) -> dict[str, Any]:
     from ...utils import parse_dt
-    from ..points.queries import change_points
+    from ..points.db import change_points
 
     ts = parse_dt(timestamp)
     with SessionLocal() as db:
@@ -84,7 +84,7 @@ def start_paid_ai_job(
     **links,
 ) -> dict[str, Any]:
     from ...utils import parse_dt
-    from ..points.queries import change_points
+    from ..points.db import change_points
 
     ts = parse_dt(timestamp)
     with SessionLocal() as db:

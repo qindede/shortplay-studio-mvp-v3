@@ -10,8 +10,8 @@ from ...db import SessionLocal, require_db
 from ...models import Asset, AssetReference, Episode, Project, Shot, VideoTask
 from ...serializers import _asset_dict, _episode_dict, _project_dict, _shot_dict
 from ...utils import parse_dt, uid
-from ..ai_job.queries import add_ai_job
-from ..points.queries import change_points
+from ..ai_job.db import add_ai_job
+from ..points.db import change_points
 
 
 @require_db

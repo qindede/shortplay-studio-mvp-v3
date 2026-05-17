@@ -14,8 +14,8 @@ from ...utils import fmt_dt, parse_dt, uid
 
 @require_db
 def create_video_task(user: dict[str, Any], shot_id: str, provider_task_id: str, cost_per_second: int, timestamp: str) -> dict[str, Any] | None:
-    from ..points.queries import change_points
-    from ..ai_job.queries import add_ai_job
+    from ..points.db import change_points
+    from ..ai_job.db import add_ai_job
 
     ts = parse_dt(timestamp)
     with SessionLocal() as db:
@@ -116,8 +116,8 @@ def batch_create_video_tasks(user: dict[str, Any], provider_tasks: dict[str, str
     Returns (tasks, error). If any shot fails due to insufficient points,
     returns the error string and no tasks are created.
     """
-    from ..points.queries import change_points
-    from ..ai_job.queries import add_ai_job
+    from ..points.db import change_points
+    from ..ai_job.db import add_ai_job
 
     ts = parse_dt(timestamp)
     with SessionLocal() as db:
@@ -174,7 +174,7 @@ def batch_create_video_tasks(user: dict[str, Any], provider_tasks: dict[str, str
 @require_db
 def update_video_task_from_provider(task: dict[str, Any], remote: dict[str, Any]) -> None:
     """Update a video task dict (and its DB row) from remote provider data."""
-    from ..points.queries import change_points
+    from ..points.db import change_points
 
     updated = {k: v for k, v in remote.items() if v is not None}
     task.update(updated)
@@ -258,7 +258,7 @@ def delete_video_version(user: dict[str, Any], version_id: str) -> bool:
 
 @require_db
 def compose_context(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
-    from ..storyboard.queries import episode_generation_context
+    from ..storyboard.db import episode_generation_context
 
     context = episode_generation_context(user, episode_id)
     if not context:
@@ -271,8 +271,8 @@ def compose_context(user: dict[str, Any], episode_id: str) -> dict[str, Any] | N
 
 @require_db
 def save_composed_version(user: dict[str, Any], episode_id: str, payload: Any, video_url: str, cost: int, timestamp: str, charge: bool = True, job_id: str | None = None) -> dict[str, Any] | None:
-    from ..points.queries import change_points
-    from ..ai_job.queries import add_ai_job
+    from ..points.db import change_points
+    from ..ai_job.db import add_ai_job
 
     ts = parse_dt(timestamp)
     with SessionLocal() as db:

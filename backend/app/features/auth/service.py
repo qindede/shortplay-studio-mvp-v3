@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from ..errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError, UnauthorizedError
-from . import queries
+from . import db
 
 
 def login_user(username: str, password: str, token: str, last_login: str) -> dict[str, Any]:
-    user = queries.login_user(username, password, token, last_login)
+    user = db.login_user(username, password, token, last_login)
     if not user:
         raise UnauthorizedError("用户名或密码错误")
     if user.get("status") != "active":
@@ -23,14 +23,14 @@ def register_user(
     timestamp: str,
     bonus_points: int = 1000,
 ) -> dict[str, Any]:
-    user = queries.register_user(username, display_name, password_hash, token, timestamp, bonus_points)
+    user = db.register_user(username, display_name, password_hash, token, timestamp, bonus_points)
     if user is None:
         raise ConflictError("用户名已存在")
     return user
 
 
 def change_password(user_id: str, current_password: str, new_password: str) -> None:
-    result = queries.change_password(user_id, current_password, new_password)
+    result = db.change_password(user_id, current_password, new_password)
     if result == "missing":
         raise NotFoundError("用户不存在")
     if result == "bad_password":
@@ -38,7 +38,7 @@ def change_password(user_id: str, current_password: str, new_password: str) -> N
 
 
 def get_current_user(token: str | None) -> dict[str, Any]:
-    user = queries.find_user_by_token(token)
+    user = db.find_user_by_token(token)
     if not user:
         raise UnauthorizedError("未登录或登录已失效")
     if user.get("status") != "active":

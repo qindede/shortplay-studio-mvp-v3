@@ -8,7 +8,14 @@ from ...schemas import OutlineGenerateRequest, StoryboardGenerateRequest
 from ...utils import comparable_asset_names, now, uid
 from ..ai_job.service import run_paid_generation as _run_paid_generation
 from ..errors import InsufficientPointsError, NotFoundError, ServiceUnavailableError
-from . import queries
+from . import db
+
+
+def get_episode_generation_context(user: dict, episode_id: str) -> dict:
+    context = db.episode_generation_context(user, episode_id)
+    if context is None:
+        raise NotFoundError("剧集不存在")
+    return context
 
 
 def generate_project_outline(user: dict, payload: OutlineGenerateRequest) -> dict:
@@ -58,7 +65,7 @@ def _generated_asset_payload(project_id: str, payload: dict, generated_url: str 
 
 def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerateRequest | None = None) -> list[dict]:
     """Generate storyboard shots and any missing assets via AI, persisting through save_storyboard."""
-    context = queries.episode_generation_context(user, episode_id)
+    context = db.episode_generation_context(user, episode_id)
     if not context:
         raise NotFoundError("剧集不存在")
 
@@ -79,7 +86,7 @@ def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerate
             generated_url = ai_image.generate_image(item["prompt"])
             generated_assets.append(_generated_asset_payload(context["project"]["id"], item, generated_url))
         ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], existing_assets + generated_assets)
-        shots = queries.save_storyboard(
+        shots = db.save_storyboard(
             user,
             episode_id,
             ai_shots,
@@ -149,7 +156,7 @@ def prepare_storyboard(user: dict, episode_id: str) -> dict:
     from ...ai.errors import AIError
     from ..points.service import ensure_points
 
-    context = queries.episode_generation_context(user, episode_id)
+    context = db.episode_generation_context(user, episode_id)
     if not context:
         raise NotFoundError("剧集不存在")
     ensure_points(user, POINT_RULES["storyboard"])

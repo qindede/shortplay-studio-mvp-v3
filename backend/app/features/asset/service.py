@@ -10,18 +10,18 @@ from ... import storage
 from ...utils import normalize_refs, now, uid
 from ..ai_job.service import run_paid_generation as _run_paid_generation
 from ..errors import BadRequestError, InsufficientPointsError, NotFoundError
-from . import queries
+from . import db
 
 
 def list_assets(user: dict[str, Any], project_id: str, asset_type: str | None = None) -> list[dict]:
-    result = queries.list_assets(user, project_id, asset_type)
+    result = db.list_assets(user, project_id, asset_type)
     if result is None:
         raise NotFoundError("项目不存在")
     return result
 
 
 def get_asset(user: dict[str, Any], asset_id: str) -> dict:
-    result = queries.get_asset(user, asset_id)
+    result = db.get_asset(user, asset_id)
     if result is None:
         raise NotFoundError("素材不存在")
     return result
@@ -31,7 +31,7 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     refs = normalize_refs(payload.references)
     visual_asset = payload.type in {"character", "scene", "image"}
     cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-    result = queries.create_asset(user, project_id, payload, refs, cost, now())
+    result = db.create_asset(user, project_id, payload, refs, cost, now())
     if result is None:
         raise NotFoundError("项目不存在")
     if isinstance(result, dict) and result.get("error") == "insufficient_points":
@@ -41,10 +41,8 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
 
 def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     """Generate an asset using AI image generation."""
-    from ..project.queries import get_project
+    from ..project.service import get_project
     project = get_project(user, project_id)
-    if not project:
-        raise NotFoundError("项目不存在")
 
     visual_asset = payload.type in {"character", "scene", "image"}
     cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
@@ -59,7 +57,7 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
             "url": generated_url,
             "note": payload.prompt,
         }]
-        asset = queries.generate_asset_without_charge(user, project_id, payload, generated_url, refs, now())
+        asset = db.generate_asset_without_charge(user, project_id, payload, generated_url, refs, now())
         return asset, {"asset_id": asset["id"], "url": generated_url}
 
     return _run_paid_generation(
@@ -87,7 +85,7 @@ def start_voice_clone(user: dict[str, Any], asset_id: str, payload: Any) -> dict
         audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
         speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
         result = ai_voice.clone_voice(speaker_id, audio, voice_url.rsplit(".", 1)[-1] if "." in voice_url else "wav")
-        updated = queries.update_voice_clone(user, asset_id, result, 0, now(), consume=False, job_id=job["id"])
+        updated = db.update_voice_clone(user, asset_id, result, 0, now(), consume=False, job_id=job["id"])
         return updated, {}
 
     return _run_paid_generation(
@@ -107,20 +105,20 @@ def start_voice_clone(user: dict[str, Any], asset_id: str, payload: Any) -> dict
 def update_asset(user: dict[str, Any], asset_id: str, payload: Any) -> dict:
     refs_raw = payload.model_dump(exclude_unset=True).get("references")
     refs = normalize_refs(refs_raw) if refs_raw is not None else None
-    result = queries.update_asset(user, asset_id, payload, refs, now())
+    result = db.update_asset(user, asset_id, payload, refs, now())
     if result is None:
         raise NotFoundError("素材不存在")
     return result
 
 
 def delete_asset(user: dict[str, Any], asset_id: str) -> dict:
-    if not queries.delete_asset(user, asset_id):
+    if not db.delete_asset(user, asset_id):
         raise NotFoundError("素材不存在")
     return {"ok": True}
 
 
 def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, Any], cost: int = 0, consume: bool = True, job_id: str | None = None) -> dict:
-    updated = queries.update_voice_clone(user, asset_id, result, cost, now(), consume=consume, job_id=job_id)
+    updated = db.update_voice_clone(user, asset_id, result, cost, now(), consume=consume, job_id=job_id)
     if updated is None:
         raise NotFoundError("素材不存在")
     if isinstance(updated, dict) and updated.get("error") == "insufficient_points":

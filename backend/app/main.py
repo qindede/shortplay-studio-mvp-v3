@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import HTTPException, Response
 
 from .features.admin.router import router as admin_router
 from .features.ai_job.router import router as ai_job_router

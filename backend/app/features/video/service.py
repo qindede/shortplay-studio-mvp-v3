@@ -13,7 +13,7 @@ from ... import storage
 from ..ai_job.service import run_paid_generation as _run_paid_generation
 from ..errors import BadRequestError, NotFoundError, ServiceUnavailableError
 from ...utils import now
-from . import queries
+from . import db
 
 
 def _video_cost(shot: dict) -> int:
@@ -47,10 +47,8 @@ def _provider_media_url(url: str | None) -> str | None:
 
 
 def generate_video_for_shot(user: dict, shot_id: str) -> dict:
-    from ...features.shot.queries import shot_generation_context
+    from ...features.shot.service import get_generation_context as shot_generation_context
     ctx = shot_generation_context(user, shot_id)
-    if not ctx:
-        raise NotFoundError("镜头不存在")
     shot, episode, assets = ctx["shot"], ctx.get("episode"), ctx.get("assets", [])
     cost = _video_cost(shot)
 
@@ -60,7 +58,7 @@ def generate_video_for_shot(user: dict, shot_id: str) -> dict:
             _reference_image(assets, shot),
             shot["duration"],
         )
-        task = queries.attach_video_task_to_job(user, shot_id, provider_task_id, job["id"], now())
+        task = db.attach_video_task_to_job(user, shot_id, provider_task_id, job["id"], now())
         return task, {}
 
     return _run_paid_generation(
@@ -79,10 +77,8 @@ def generate_video_for_shot(user: dict, shot_id: str) -> dict:
 
 
 def generate_videos_for_episode(user: dict, episode_id: str) -> list[dict]:
-    from ...features.storyboard.queries import episode_generation_context
+    from ...features.storyboard.service import get_episode_generation_context as episode_generation_context
     context = episode_generation_context(user, episode_id)
-    if not context:
-        raise NotFoundError("剧集不存在")
     shots = context.get("shots", [])
     if not shots:
         raise NotFoundError("分镜不存在")
@@ -93,7 +89,7 @@ def generate_videos_for_episode(user: dict, episode_id: str) -> list[dict]:
 
 
 def compose_episode(user: dict, episode_id: str, payload: Any, compose_video_file: Callable[[list[dict]], str]) -> dict:
-    context = queries.compose_context(user, episode_id)
+    context = db.compose_context(user, episode_id)
     if not context:
         raise NotFoundError("剧集不存在")
     shots = context.get("shots", [])
@@ -103,7 +99,7 @@ def compose_episode(user: dict, episode_id: str, payload: Any, compose_video_fil
     def work(job: dict) -> tuple[dict, dict | None]:
         shot_order = {shot["id"]: shot["no"] for shot in shots}
         video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
-        version = queries.save_composed_version(user, episode_id, payload, video_url, 0, now(), charge=False, job_id=job["id"])
+        version = db.save_composed_version(user, episode_id, payload, video_url, 0, now(), charge=False, job_id=job["id"])
         return version, None
 
     return _run_paid_generation(
@@ -153,10 +149,8 @@ def compose_video_file(tasks: list[dict]) -> str:
 
 def list_video_tasks_with_poll(user: dict, episode_id: str) -> list[dict]:
     """Poll video task status from provider and return updated tasks."""
-    from ...features.workspace.queries import episode_workspace
+    from ...features.workspace.service import episode_workspace
     payload = episode_workspace(user, episode_id)
-    if payload is None:
-        raise NotFoundError("剧集不存在")
     tasks = payload["video_tasks"]
     for task in tasks:
         if task.get("status") != "generating" or not task.get("provider_task_id"):
@@ -166,5 +160,5 @@ def list_video_tasks_with_poll(user: dict, episode_id: str) -> list[dict]:
             remote = query_video_task(task["provider_task_id"])
         except AIError:
             continue
-        queries.update_video_task_from_provider(task, remote)
+        db.update_video_task_from_provider(task, remote)
     return sorted(tasks, key=lambda t: t.get("updated_at", ""), reverse=True)
