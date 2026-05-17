@@ -47,11 +47,17 @@ class FakeStorage:
 class PaidGenerationLifecycleTests(unittest.TestCase):
     def setUp(self) -> None:
         FakeStorage.reset()
-        self.storage_patch = patch.object(generation_service, "Storage", FakeStorage)
-        self.storage_patch.start()
+        self.patches = [
+            patch("app.features.ai_job.service.start_paid_ai_job", FakeStorage.start_paid_ai_job),
+            patch("app.features.ai_job.service.complete_ai_job", FakeStorage.complete_ai_job),
+            patch("app.features.ai_job.service.fail_ai_job_with_refund", FakeStorage.fail_ai_job_with_refund),
+        ]
+        for p in self.patches:
+            p.start()
 
     def tearDown(self) -> None:
-        self.storage_patch.stop()
+        for p in self.patches:
+            p.stop()
 
     def test_success_completes_paid_job(self) -> None:
         def work(job: dict):

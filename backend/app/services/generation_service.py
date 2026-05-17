@@ -12,40 +12,12 @@ from ..ai import voice as ai_voice
 from ..ai.errors import AIError
 from ..config import BACKEND_PUBLIC_URL, POINT_RULES
 from .. import storage
+from ..features.ai_job.service import run_paid_generation as _run_paid_generation
 from ..schemas import AssetGenerate, ComposeRequest, OutlineGenerateRequest, StoryboardGenerateRequest, VoiceCloneRequest
 from ..storage_adapter import Storage
 from ..utils import comparable_asset_names, now, uid
 
 T = TypeVar("T")
-
-
-def _run_paid_generation(
-    user: dict,
-    cost: int,
-    scene: str,
-    description: str,
-    job_type: str,
-    provider: str,
-    work: Callable[[dict], tuple[T, dict[str, Any] | None]],
-    failure_message: str = "生成失败",
-    complete: bool = True,
-    **links,
-) -> T:
-    job = Storage.start_paid_ai_job(user, cost, scene, description, job_type, provider, **links)
-    try:
-        result, output = work(job)
-    except AIError as exc:
-        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
-        raise
-    except storage.StorageError as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc))
-        raise
-    except Exception as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc) or failure_message)
-        raise
-    if complete:
-        Storage.complete_ai_job(job["id"], output or {})
-    return result
 
 
 def generate_project_outline(user: dict, payload: OutlineGenerateRequest) -> dict:

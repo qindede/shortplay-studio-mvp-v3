@@ -6,7 +6,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException, Response
 
-from .routers import admin, auth, content, upload
+from .features.admin.router import router as admin_router
+from .features.ai_job.router import router as ai_job_router
+from .features.asset.router import router as asset_router
+from .features.auth.router import router as auth_router
+from .features.episode.router import router as episode_router
+from .features.project.router import router as project_router
+from .features.shot.router import router as shot_router
+from .features.storyboard.router import router as storyboard_router
+from .features.video.router import router as video_router
+from .features.workspace.router import router as workspace_router
+from .routers import upload
 from . import storage
 from .ai.client import close_client
 
@@ -27,9 +37,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(content.router)
-app.include_router(admin.router)
+app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(workspace_router)
+app.include_router(project_router)
+app.include_router(episode_router)
+app.include_router(shot_router)
+app.include_router(storyboard_router)
+app.include_router(asset_router)
+app.include_router(video_router)
+app.include_router(ai_job_router)
 app.include_router(upload.router)
 
 
