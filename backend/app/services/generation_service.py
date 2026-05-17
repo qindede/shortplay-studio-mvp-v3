@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any, TypeVar
+
 from fastapi import HTTPException
 
 from ..ai import image as ai_image
@@ -13,27 +16,53 @@ from ..schemas import AssetGenerate, ComposeRequest, OutlineGenerateRequest, Sto
 from ..storage_adapter import Storage
 from ..utils import comparable_asset_names, now, uid
 
+T = TypeVar("T")
+
+
+def _run_paid_generation(
+    user: dict,
+    cost: int,
+    scene: str,
+    description: str,
+    job_type: str,
+    provider: str,
+    work: Callable[[dict], tuple[T, dict[str, Any] | None]],
+    failure_message: str = "生成失败",
+    complete: bool = True,
+    **links,
+) -> T:
+    job = Storage.start_paid_ai_job(user, cost, scene, description, job_type, provider, **links)
+    try:
+        result, output = work(job)
+    except AIError as exc:
+        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
+        raise
+    except storage.StorageError as exc:
+        Storage.fail_ai_job_with_refund(job["id"], str(exc))
+        raise
+    except Exception as exc:
+        Storage.fail_ai_job_with_refund(job["id"], str(exc) or failure_message)
+        raise
+    if complete:
+        Storage.complete_ai_job(job["id"], output or {})
+    return result
+
 
 def generate_project_outline(user: dict, payload: OutlineGenerateRequest) -> dict:
     cost = POINT_RULES["outline"]
-    job = Storage.start_paid_ai_job(
+    def work(job: dict) -> tuple[dict, dict]:
+        episodes = ai_llm.generate_outline(payload)
+        return {"cost": cost, "episodes": episodes}, {"episode_count": len(episodes)}
+
+    return _run_paid_generation(
         user,
         cost,
         "生成短剧大纲",
         f"智能生成《{payload.name}》短剧大纲",
         "outline",
         "minimax",
+        work,
     )
-    try:
-        episodes = ai_llm.generate_outline(payload)
-    except AIError as exc:
-        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
-        raise
-    except Exception as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
-        raise
-    Storage.complete_ai_job(job["id"], {"episode_count": len(episodes)})
-    return {"cost": cost, "episodes": episodes}
 
 
 def _generated_asset_payload(project_id: str, payload: dict, generated_url: str | None) -> dict:
@@ -76,36 +105,27 @@ def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerate
     }
     assets_to_generate = [item for item in confirmed_assets if item["name"].strip() not in existing_names]
     total_cost = POINT_RULES["storyboard"] + len(assets_to_generate) * POINT_RULES["image_asset"]
-    job = Storage.start_paid_ai_job(
-        user,
-        total_cost,
-        "生成分镜",
-        f"生成/更新《{context['episode']['title']}》分镜，含 {len(assets_to_generate)} 个素材",
-        "storyboard",
-        "minimax",
-        project_id=context["project"]["id"],
-        episode_id=episode_id,
-    )
 
-    try:
+    def work(job: dict) -> tuple[list[dict], dict]:
         generated_assets = []
         for item in assets_to_generate:
             generated_url = ai_image.generate_image(item["prompt"])
             generated_assets.append(_generated_asset_payload(context["project"]["id"], item, generated_url))
         ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], existing_assets + generated_assets)
         shots = Storage.save_storyboard_without_charge(user, episode_id, ai_shots, generated_assets)
-    except AIError as exc:
-        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
-        raise
-    except Exception as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
-        raise
+        return shots, {"shot_count": len(shots), "generated_asset_count": len(generated_assets)}
 
-    Storage.complete_ai_job(
-        job["id"],
-        {"shot_count": len(shots), "generated_asset_count": len(generated_assets)},
+    return _run_paid_generation(
+        user,
+        total_cost,
+        "生成分镜",
+        f"生成/更新《{context['episode']['title']}》分镜，含 {len(assets_to_generate)} 个素材",
+        "storyboard",
+        "minimax",
+        work,
+        project_id=context["project"]["id"],
+        episode_id=episode_id,
     )
-    return shots
 
 
 def _video_cost(shot: dict) -> int:
@@ -141,30 +161,29 @@ def _provider_media_url(url: str | None) -> str | None:
 def generate_video_for_shot(user: dict, shot_id: str) -> dict:
     shot, episode, assets = Storage.get_shot_with_context(user, shot_id)
     cost = _video_cost(shot)
-    job = Storage.start_paid_ai_job(
+
+    def work(job: dict) -> tuple[dict, dict]:
+        provider_task_id = ai_video.create_video_task(
+            shot.get("visual") or shot["title"],
+            _reference_image(assets, shot),
+            shot["duration"],
+        )
+        task = Storage.attach_video_task_to_job(user, shot_id, provider_task_id, job["id"])
+        return task, {}
+
+    return _run_paid_generation(
         user,
         cost,
         "生成镜头视频",
         f"生成镜头 #{shot['no']}《{shot['title']}》，{max(1, int(shot.get('duration') or 1))}s",
         "video_shot",
         "seedance",
+        work,
+        complete=False,
         project_id=episode.get("project_id") if episode else None,
         episode_id=shot.get("episode_id"),
         shot_id=shot.get("id"),
     )
-    try:
-        provider_task_id = ai_video.create_video_task(
-            shot.get("visual") or shot["title"],
-            _reference_image(assets, shot),
-            shot["duration"],
-        )
-        return Storage.attach_video_task_to_job(user, shot_id, provider_task_id, job["id"])
-    except AIError as exc:
-        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
-        raise
-    except Exception as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
-        raise
 
 
 def generate_videos_for_episode(user: dict, episode_id: str) -> list[dict]:
@@ -185,16 +204,8 @@ def generate_asset(user: dict, project_id: str, payload: AssetGenerate) -> dict:
     Storage.get_project(user, project_id)
     cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
     provider = "seedream" if visual_asset else "manual"
-    job = Storage.start_paid_ai_job(
-        user,
-        cost,
-        "AI 生成素材",
-        f"AI 生成素材《{payload.name}》",
-        "image_asset" if visual_asset else "audio_asset",
-        provider,
-        project_id=project_id,
-    )
-    try:
+
+    def work(job: dict) -> tuple[dict, dict]:
         generated_url = ai_image.generate_image(payload.prompt) if visual_asset else None
         refs = [{
             "id": uid("ref"),
@@ -204,15 +215,18 @@ def generate_asset(user: dict, project_id: str, payload: AssetGenerate) -> dict:
             "note": payload.prompt,
         }]
         asset = Storage.generate_asset_without_charge(user, project_id, payload, generated_url, refs)
-    except AIError as exc:
-        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
-        raise
-    except Exception as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
-        raise
+        return asset, {"asset_id": asset["id"], "url": generated_url}
 
-    Storage.complete_ai_job(job["id"], {"asset_id": asset["id"], "url": generated_url})
-    return asset
+    return _run_paid_generation(
+        user,
+        cost,
+        "AI 生成素材",
+        f"AI 生成素材《{payload.name}》",
+        "image_asset" if visual_asset else "audio_asset",
+        provider,
+        work,
+        project_id=project_id,
+    )
 
 
 def start_voice_clone(user: dict, asset_id: str, payload: VoiceCloneRequest) -> dict:
@@ -222,27 +236,26 @@ def start_voice_clone(user: dict, asset_id: str, payload: VoiceCloneRequest) -> 
     voice_url = payload.voice_url or asset.get("voice_url")
     if not voice_url or not voice_url.startswith("/uploads/"):
         raise HTTPException(status_code=400, detail="请先上传角色声音样本")
-    job = Storage.start_paid_ai_job(
+
+    def work(job: dict) -> tuple[dict, dict]:
+        audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
+        speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
+        result = ai_voice.clone_voice(speaker_id, audio, voice_url.rsplit(".", 1)[-1] if "." in voice_url else "wav")
+        updated = Storage.update_voice_clone_with_job(user, asset_id, result, job["id"])
+        return updated, {}
+
+    return _run_paid_generation(
         user,
         POINT_RULES["voice_clone"],
         "音色克隆",
         f"训练《{asset['name']}》角色音色",
         "voice_clone",
         "volc_voice",
+        work,
+        complete=False,
         project_id=asset.get("project_id"),
         asset_id=asset_id,
     )
-    try:
-        audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
-        speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
-        result = ai_voice.clone_voice(speaker_id, audio, voice_url.rsplit(".", 1)[-1] if "." in voice_url else "wav")
-        return Storage.update_voice_clone_with_job(user, asset_id, result, job["id"])
-    except (AIError, storage.StorageError) as exc:
-        Storage.fail_ai_job_with_refund(job["id"], getattr(exc, "public_message", str(exc)))
-        raise
-    except Exception as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
-        raise
 
 
 def compose_episode(user: dict, episode_id: str, payload: ComposeRequest, compose_video_file) -> dict:
@@ -252,20 +265,23 @@ def compose_episode(user: dict, episode_id: str, payload: ComposeRequest, compos
     shots = context.get("shots", [])
     if not shots or any(shot.get("status") != "completed" for shot in shots):
         raise HTTPException(status_code=400, detail="所有镜头完成后才能合成本集视频")
-    job = Storage.start_paid_ai_job(
+
+    def work(job: dict) -> tuple[dict, dict | None]:
+        shot_order = {shot["id"]: shot["no"] for shot in shots}
+        video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
+        version = Storage.save_composed_version_with_job(user, episode_id, payload, video_url, job["id"])
+        return version, None
+
+    return _run_paid_generation(
         user,
         POINT_RULES["compose"],
         "合成成片",
         f"合成《{context['episode']['title']}》成片版本",
         "compose",
         "ffmpeg",
+        work,
+        complete=False,
+        failure_message="合成失败",
         project_id=context["project"]["id"],
         episode_id=episode_id,
     )
-    try:
-        shot_order = {shot["id"]: shot["no"] for shot in shots}
-        video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
-        return Storage.save_composed_version_with_job(user, episode_id, payload, video_url, job["id"])
-    except Exception as exc:
-        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "合成失败")
-        raise
