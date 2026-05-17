@@ -1765,6 +1765,55 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any, generate
 
 
 @require_db
+def generate_asset_without_charge(user: dict[str, Any], project_id: str, payload: Any, generated_url: str | None, refs: list[dict], timestamp: str) -> dict[str, Any] | None:
+    ts = parse_dt(timestamp)
+    with SessionLocal() as db:
+        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
+        target_user = db.get(User, user["id"])
+        if not project or not target_user:
+            return None
+        asset = Asset(
+            id=uid("asset"),
+            project_id=project_id,
+            type=payload.type,
+            name=payload.name,
+            description=payload.description,
+            initial=payload.name[:1],
+            image_url=generated_url,
+            voice_label=None,
+            voice_url=None,
+            voice_status=None,
+            provider_meta={},
+            updated_at=ts,
+        )
+        db.add(asset)
+        db.flush()
+        for index, ref in enumerate(refs):
+            db.add(
+                AssetReference(
+                    id=ref.get("id") or uid("ref"),
+                    asset_id=asset.id,
+                    type=ref.get("type", "image"),
+                    name=ref.get("name") or f"参考 {index + 1}",
+                    url=ref.get("url"),
+                    note=ref.get("note"),
+                    sort_order=index,
+                )
+            )
+        if payload.type in {"character", "scene", "image"}:
+            usage = dict(target_user.usage_json or {})
+            usage.setdefault("image_total", 1000)
+            usage.setdefault("image_used", 0)
+            usage["image_used"] = min(usage["image_total"], usage["image_used"] + 1)
+            target_user.usage_json = usage
+        project.updated_at = ts
+        db.flush()
+        result = _asset_dict(asset, refs)
+        db.commit()
+        return result
+
+
+@require_db
 def update_asset(user: dict[str, Any], asset_id: str, payload: Any, refs: list[dict] | None, timestamp: str) -> dict[str, Any] | None:
     ts = parse_dt(timestamp)
     with SessionLocal() as db:

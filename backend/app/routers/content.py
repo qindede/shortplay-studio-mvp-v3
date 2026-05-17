@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
 from .. import storage
-from ..ai import image as ai_image
 from ..ai import llm as ai_llm
 from ..ai import voice as ai_voice
 from ..ai.errors import AIError
@@ -243,24 +242,10 @@ def create_asset(project_id: str, payload: AssetCreate, user: dict = Depends(get
 
 @router.post("/projects/{project_id}/assets/generate")
 def generate_asset(project_id: str, payload: AssetGenerate, user: dict = Depends(get_current_user)):
-    visual_asset = payload.type in {"character", "scene", "image"}
-    Storage.get_project(user, project_id)
-    ensure_points(user, POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"])
-    if visual_asset:
-        try:
-            generated_url = ai_image.generate_image(payload.prompt)
-        except AIError as exc:
-            raise ai_error(exc) from exc
-    else:
-        generated_url = None
-    refs = [{
-        "id": uid("ref"),
-        "type": "image" if visual_asset else "audio",
-        "name": f"AI 生成 - {payload.name}",
-        "url": generated_url,
-        "note": payload.prompt,
-    }]
-    return Storage.generate_asset(user, project_id, payload, generated_url, refs, visual_asset)
+    try:
+        return generation_service.generate_asset(user, project_id, payload)
+    except AIError as exc:
+        raise ai_error(exc) from exc
 
 
 @router.put("/assets/{asset_id}")

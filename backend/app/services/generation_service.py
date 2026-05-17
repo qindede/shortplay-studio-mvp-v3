@@ -7,7 +7,7 @@ from ..ai import llm as ai_llm
 from ..ai import video as ai_video
 from ..ai.errors import AIError
 from ..config import BACKEND_PUBLIC_URL, POINT_RULES
-from ..schemas import OutlineGenerateRequest, StoryboardGenerateRequest
+from ..schemas import AssetGenerate, OutlineGenerateRequest, StoryboardGenerateRequest
 from ..storage_adapter import Storage
 from ..utils import comparable_asset_names, now, uid
 
@@ -176,3 +176,38 @@ def generate_videos_for_episode(user: dict, episode_id: str) -> list[dict]:
     for shot in shots:
         tasks.append(generate_video_for_shot(user, shot["id"]))
     return tasks
+
+
+def generate_asset(user: dict, project_id: str, payload: AssetGenerate) -> dict:
+    visual_asset = payload.type in {"character", "scene", "image"}
+    Storage.get_project(user, project_id)
+    cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
+    provider = "seedream" if visual_asset else "manual"
+    job = Storage.start_paid_ai_job(
+        user,
+        cost,
+        "AI 生成素材",
+        f"AI 生成素材《{payload.name}》",
+        "image_asset" if visual_asset else "audio_asset",
+        provider,
+        project_id=project_id,
+    )
+    try:
+        generated_url = ai_image.generate_image(payload.prompt) if visual_asset else None
+        refs = [{
+            "id": uid("ref"),
+            "type": "image" if visual_asset else "audio",
+            "name": f"AI 生成 - {payload.name}",
+            "url": generated_url,
+            "note": payload.prompt,
+        }]
+        asset = Storage.generate_asset_without_charge(user, project_id, payload, generated_url, refs)
+    except AIError as exc:
+        Storage.fail_ai_job_with_refund(job["id"], exc.public_message)
+        raise
+    except Exception as exc:
+        Storage.fail_ai_job_with_refund(job["id"], str(exc) or "生成失败")
+        raise
+
+    Storage.complete_ai_job(job["id"], {"asset_id": asset["id"], "url": generated_url})
+    return asset

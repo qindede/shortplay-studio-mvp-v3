@@ -306,6 +306,13 @@ class Storage:
         return asset
 
     @staticmethod
+    def generate_asset_without_charge(user: dict, project_id: str, payload: Any, generated_url: str | None, refs: list[dict]) -> dict:
+        asset = db_store.generate_asset_without_charge(user, project_id, payload, generated_url, refs, now())
+        if asset is None:
+            not_found("project")
+        return asset
+
+    @staticmethod
     def create_video_task(user: dict, shot_id: str, provider_task_id: str, cost_per_second: int) -> dict:
         task = db_store.create_video_task(user, shot_id, provider_task_id, cost_per_second, now())
         if task is None:
