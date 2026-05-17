@@ -6,7 +6,7 @@ from ...schemas import AdminPasswordReset, AdminPointAdjust, AdminUserUpdate
 from ...security import get_current_user, hash_password, require_admin
 from ...utils import now
 from ..errors import BadRequestError, ForbiddenError
-from ..router_utils import api_endpoint
+
 from . import service
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -20,19 +20,19 @@ def is_primary_admin(user: dict) -> bool:
 
 
 @router.get("/summary")
-@api_endpoint
+
 def admin_summary(admin: dict = Depends(require_admin)):
     return service.admin_summary()
 
 
 @router.get("/users")
-@api_endpoint
+
 def admin_users(admin: dict = Depends(require_admin)):
     return service.admin_users()
 
 
 @router.patch("/users/{user_id}")
-@api_endpoint
+
 def admin_update_user(user_id: str, payload: AdminUserUpdate, admin: dict = Depends(require_admin)):
     target = service.get_user(user_id)
     is_self_update = target["id"] == admin["id"]
@@ -51,7 +51,7 @@ def admin_update_user(user_id: str, payload: AdminUserUpdate, admin: dict = Depe
 
 
 @router.post("/users/{user_id}/reset-password")
-@api_endpoint
+
 def admin_reset_user_password(user_id: str, payload: AdminPasswordReset, admin: dict = Depends(require_admin)):
     target = service.get_user(user_id)
     if target["id"] == admin["id"]:
@@ -62,7 +62,7 @@ def admin_reset_user_password(user_id: str, payload: AdminPasswordReset, admin: 
 
 
 @router.post("/users/{user_id}/adjust-points")
-@api_endpoint
+
 def admin_adjust_points(user_id: str, payload: AdminPointAdjust, admin: dict = Depends(require_admin)):
     if payload.amount == 0:
         raise BadRequestError("调整积分不能为 0")
@@ -70,6 +70,6 @@ def admin_adjust_points(user_id: str, payload: AdminPointAdjust, admin: dict = D
 
 
 @router.get("/point-ledger")
-@api_endpoint
+
 def admin_point_ledger(user_id: str | None = Query(default=None), admin: dict = Depends(require_admin)):
     return service.admin_point_ledger(user_id)

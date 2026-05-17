@@ -6,7 +6,7 @@ from ... import storage
 from ...config import UPLOAD_DIR
 from ...security import get_current_user
 from ..errors import BadRequestError, ServiceUnavailableError
-from ..router_utils import api_endpoint
+
 
 ALLOWED_TYPES = {
     "image/jpeg", "image/png", "image/webp",
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api", tags=["upload"])
 
 
 @router.post("/upload")
-@api_endpoint
+
 async def upload_file(file: UploadFile, user: dict = Depends(get_current_user)):
     if file.content_type not in ALLOWED_TYPES:
         raise BadRequestError(f"不支持的文件类型: {file.content_type}")
@@ -37,7 +37,7 @@ async def upload_file(file: UploadFile, user: dict = Depends(get_current_user)):
 
 
 @router.get("/uploads/{path:path}")
-@api_endpoint
+
 def read_upload(path: str):
     try:
         data, content_type = storage.get_object(path)

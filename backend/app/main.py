@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from .features.errors import DomainError
+from .features.router_utils import resolve_status
 
 from .features.admin.router import router as admin_router
 from .features.ai_job.router import router as ai_job_router
@@ -34,6 +38,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(DomainError)
+async def domain_error_handler(request: Request, exc: DomainError):
+    return JSONResponse(status_code=resolve_status(exc), content={"detail": exc.detail})
+
 
 app.include_router(auth_router)
 app.include_router(admin_router)

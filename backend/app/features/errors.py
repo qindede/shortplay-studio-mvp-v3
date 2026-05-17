@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class DomainError(Exception):
-    """业务异常基类，由 service 层抛出，由 router 层的 @api_endpoint 装饰器捕获并转换为 HTTP 响应。"""
+    """业务异常基类，由 service 层抛出，由 main.py 的全局异常处理器转换为 HTTP 响应。"""
 
     def __init__(self, detail: str):
         self.detail = detail
