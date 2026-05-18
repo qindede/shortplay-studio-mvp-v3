@@ -39,20 +39,82 @@ def _extract_json(text: str) -> str:
     m = _FENCE_RE.search(text)
     if m:
         text = m.group(1).strip()
+    # Find the first { or [ and match brackets to find the real end
     start = None
-    end = None
     for i, ch in enumerate(text):
-        if ch in "{[" and start is None:
+        if ch in "{[":
             start = i
-        if ch in "}]":
-            end = i
-    if start is not None and end is not None:
-        return text[start : end + 1]
-    return text
+            break
+    if start is None:
+        return text
+    opener = text[start]
+    closer = "}" if opener == "{" else "]"
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            if in_string:
+                escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == opener:
+            depth += 1
+        elif ch == closer:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    # Bracket mismatch — return from start to end as fallback
+    return text[start:]
+
+
+def _repair_json(text: str) -> str:
+    """Fix common LLM JSON mistakes: unescaped newlines/tabs inside strings."""
+    # Escape bare control characters inside string values
+    result = []
+    in_string = False
+    escape = False
+    for ch in text:
+        if escape:
+            result.append(ch)
+            escape = False
+            continue
+        if ch == "\\":
+            if in_string:
+                escape = True
+            result.append(ch)
+            continue
+        if ch == '"':
+            in_string = not in_string
+            result.append(ch)
+            continue
+        if in_string and ch == "\n":
+            result.append("\\n")
+            continue
+        if in_string and ch == "\r":
+            result.append("\\r")
+            continue
+        if in_string and ch == "\t":
+            result.append("\\t")
+            continue
+        result.append(ch)
+    return "".join(result)
 
 
 def _chat_json(system: str, user: str, timeout: float | None = None) -> Any:
     key = require_key(AI.minimax_api_key, "MINIMAX_API_KEY")
+    base_url = AI.minimax_base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    timeout = timeout or AI.request_timeout
+
     payload = {
         "model": AI.minimax_text_model,
         "messages": [
@@ -61,18 +123,40 @@ def _chat_json(system: str, user: str, timeout: float | None = None) -> Any:
         ],
         "response_format": {"type": "json_object"},
     }
-    body = post_json(
-        f"{AI.minimax_base_url.rstrip('/')}/chat/completions",
-        {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        payload,
-        timeout or AI.request_timeout,
-    )
+    body = post_json(f"{base_url}/chat/completions", headers, payload, timeout)
     raw = body.get("choices", [{}])[0].get("message", {}).get("content", "")
     content = _extract_json(raw)
+    # Try direct parse first, then try repairing common LLM JSON mistakes
     try:
         return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    repaired = _repair_json(content)
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        pass
+    # Last resort: ask the LLM to fix its own JSON
+    fix_messages = [
+        {"role": "system", "content": "你是一个 JSON 修复工具。用户会给你一段损坏的 JSON，你需要修复它并只返回合法的 JSON，不要输出任何其他文字。"},
+        {"role": "user", "content": f"请修复以下 JSON：\n{content[:4000]}"},
+    ]
+    fix_payload = {
+        "model": AI.minimax_text_model,
+        "messages": fix_messages,
+        "response_format": {"type": "json_object"},
+    }
+    body2 = post_json(f"{base_url}/chat/completions", headers, fix_payload, timeout)
+    raw2 = body2.get("choices", [{}])[0].get("message", {}).get("content", "")
+    content2 = _extract_json(raw2)
+    try:
+        return json.loads(content2)
     except json.JSONDecodeError as exc:
-        raise AIOutputSchemaError("LLM did not return valid JSON") from exc
+        repaired2 = _repair_json(content2)
+        try:
+            return json.loads(repaired2)
+        except json.JSONDecodeError as exc2:
+            raise AIOutputSchemaError("LLM did not return valid JSON") from exc2
 
 
 def _first_value(data: dict, keys: tuple[str, ...], default: Any = "") -> Any:
