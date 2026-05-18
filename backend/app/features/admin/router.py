@@ -21,20 +21,20 @@ def is_primary_admin(user: dict) -> bool:
 
 @router.get("/summary")
 
-def admin_summary(admin: dict = Depends(require_admin)):
-    return service.admin_summary()
+async def admin_summary(admin: dict = Depends(require_admin)):
+    return await service.admin_summary()
 
 
 @router.get("/users")
 
-def admin_users(admin: dict = Depends(require_admin)):
-    return service.admin_users()
+async def admin_users(admin: dict = Depends(require_admin)):
+    return await service.admin_users()
 
 
 @router.patch("/users/{user_id}")
 
-def admin_update_user(user_id: str, payload: AdminUserUpdate, admin: dict = Depends(require_admin)):
-    target = service.get_user(user_id)
+async def admin_update_user(user_id: str, payload: AdminUserUpdate, admin: dict = Depends(require_admin)):
+    target = await service.get_user(user_id)
     is_self_update = target["id"] == admin["id"]
     is_primary = is_primary_admin(target)
     if is_self_update and payload.status == "disabled":
@@ -47,29 +47,29 @@ def admin_update_user(user_id: str, payload: AdminUserUpdate, admin: dict = Depe
         raise BadRequestError("不能禁用主管理员账号")
     if is_primary and payload.role == "user":
         raise BadRequestError("不能修改主管理员角色")
-    return service.admin_update_user(user_id, payload.role, payload.status)
+    return await service.admin_update_user(user_id, payload.role, payload.status)
 
 
 @router.post("/users/{user_id}/reset-password")
 
-def admin_reset_user_password(user_id: str, payload: AdminPasswordReset, admin: dict = Depends(require_admin)):
-    target = service.get_user(user_id)
+async def admin_reset_user_password(user_id: str, payload: AdminPasswordReset, admin: dict = Depends(require_admin)):
+    target = await service.get_user(user_id)
     if target["id"] == admin["id"]:
         raise BadRequestError("请在账号设置中修改自己的密码")
     if is_primary_admin(target):
         raise BadRequestError("不能重置主管理员密码")
-    return {"user": service.admin_reset_password(user_id, hash_password(payload.password))}
+    return {"user": await service.admin_reset_password(user_id, hash_password(payload.password))}
 
 
 @router.post("/users/{user_id}/adjust-points")
 
-def admin_adjust_points(user_id: str, payload: AdminPointAdjust, admin: dict = Depends(require_admin)):
+async def admin_adjust_points(user_id: str, payload: AdminPointAdjust, admin: dict = Depends(require_admin)):
     if payload.amount == 0:
         raise BadRequestError("调整积分不能为 0")
-    return service.admin_adjust_points(user_id, payload.amount, payload.reason, now())
+    return await service.admin_adjust_points(user_id, payload.amount, payload.reason, now())
 
 
 @router.get("/point-ledger")
 
-def admin_point_ledger(user_id: str | None = Query(default=None), admin: dict = Depends(require_admin)):
-    return service.admin_point_ledger(user_id)
+async def admin_point_ledger(user_id: str | None = Query(default=None), admin: dict = Depends(require_admin)):
+    return await service.admin_point_ledger(user_id)

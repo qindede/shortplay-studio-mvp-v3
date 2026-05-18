@@ -12,29 +12,29 @@ router = APIRouter(prefix="/api", tags=["episode"])
 
 @router.get("/projects/{project_id}/episodes")
 
-def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
-    return service.list_episodes(user, project_id)
+async def list_episodes(project_id: str, user: dict = Depends(get_current_user)):
+    return await service.list_episodes(user, project_id)
 
 
 @router.post("/projects/{project_id}/episodes")
 
-def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends(get_current_user)):
-    return service.create_episode(user, project_id, payload)
+async def create_episode(project_id: str, payload: EpisodeCreate, user: dict = Depends(get_current_user)):
+    return await service.create_episode(user, project_id, payload)
 
 
 @router.get("/episodes/{episode_id}")
 
-def get_episode(episode_id: str, user: dict = Depends(get_current_user)):
-    return service.get_episode(user, episode_id)
+async def get_episode(episode_id: str, user: dict = Depends(get_current_user)):
+    return await service.get_episode(user, episode_id)
 
 
 @router.put("/episodes/{episode_id}")
 
-def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends(get_current_user)):
-    return service.update_episode(user, episode_id, payload)
+async def update_episode(episode_id: str, payload: EpisodeUpdate, user: dict = Depends(get_current_user)):
+    return await service.update_episode(user, episode_id, payload)
 
 
 @router.delete("/episodes/{episode_id}")
 
-def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
-    return service.delete_episode(user, episode_id)
+async def delete_episode(episode_id: str, user: dict = Depends(get_current_user)):
+    return await service.delete_episode(user, episode_id)

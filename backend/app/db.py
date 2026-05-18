@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 
 from .config import DATABASE_URL
 
@@ -13,28 +13,25 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True) if DATABASE_URL else None
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False) if engine else None
+engine = create_async_engine(DATABASE_URL, pool_pre_ping=True) if DATABASE_URL else None
+AsyncSessionLocal = async_sessionmaker(bind=engine, autoflush=False, class_=AsyncSession) if engine else None
 
 
 def enabled() -> bool:
-    return SessionLocal is not None
+    return AsyncSessionLocal is not None
 
 
 def require_db(func):
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        if SessionLocal is None:
+    async def wrapper(*args, **kwargs):
+        if AsyncSessionLocal is None:
             raise RuntimeError("DATABASE_URL is not configured")
-        return func(*args, **kwargs)
+        return await func(*args, **kwargs)
     return wrapper
 
 
-def get_db() -> Generator[Session, None, None]:
-    if SessionLocal is None:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    if AsyncSessionLocal is None:
         raise RuntimeError("DATABASE_URL is not configured")
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    async with AsyncSessionLocal() as session:
+        yield session

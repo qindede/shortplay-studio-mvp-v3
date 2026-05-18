@@ -6,8 +6,8 @@ from ..errors import BadRequestError, ConflictError, ForbiddenError, NotFoundErr
 from . import db
 
 
-def login_user(username: str, password: str, token: str, last_login: str) -> dict[str, Any]:
-    user = db.login_user(username, password, token, last_login)
+async def login_user(username: str, password: str, token: str, last_login: str) -> dict[str, Any]:
+    user = await db.login_user(username, password, token, last_login)
     if not user:
         raise UnauthorizedError("用户名或密码错误")
     if user.get("status") != "active":
@@ -15,7 +15,7 @@ def login_user(username: str, password: str, token: str, last_login: str) -> dic
     return user
 
 
-def register_user(
+async def register_user(
     username: str,
     display_name: str,
     password_hash: str,
@@ -23,22 +23,22 @@ def register_user(
     timestamp: str,
     bonus_points: int = 1000,
 ) -> dict[str, Any]:
-    user = db.register_user(username, display_name, password_hash, token, timestamp, bonus_points)
+    user = await db.register_user(username, display_name, password_hash, token, timestamp, bonus_points)
     if user is None:
         raise ConflictError("用户名已存在")
     return user
 
 
-def change_password(user_id: str, current_password: str, new_password: str) -> None:
-    result = db.change_password(user_id, current_password, new_password)
+async def change_password(user_id: str, current_password: str, new_password: str) -> None:
+    result = await db.change_password(user_id, current_password, new_password)
     if result == "missing":
         raise NotFoundError("用户不存在")
     if result == "bad_password":
         raise BadRequestError("当前密码不正确")
 
 
-def get_current_user(token: str | None) -> dict[str, Any]:
-    user = db.find_user_by_token(token)
+async def get_current_user(token: str | None) -> dict[str, Any]:
+    user = await db.find_user_by_token(token)
     if not user:
         raise UnauthorizedError("未登录或登录已失效")
     if user.get("status") != "active":

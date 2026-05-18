@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from ...db import SessionLocal, require_db
+from ...db import AsyncSessionLocal, require_db
 from ...models import PointLedger, User
 from ...security import verify_password
 from ...serializers import _user_dict
@@ -14,52 +14,52 @@ from ...utils import parse_dt, public_user_dict, uid
 
 
 @require_db
-def find_user_by_token(token: str | None) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.token == token))
+async def find_user_by_token(token: str | None) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(select(User).where(User.token == token))).scalar_one_or_none()
         return _user_dict(user) if user else None
 
 
 @require_db
-def find_user_by_username(username: str) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.username == username))
+async def find_user_by_username(username: str) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
         return _user_dict(user) if user else None
 
 
 @require_db
-def get_public_user(user_id: str) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        user = db.get(User, user_id)
+async def get_public_user(user_id: str) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        user = await db.get(User, user_id)
         return public_user_dict(user) if user else None
 
 
 @require_db
-def update_user_login(user_id: str, token: str, last_login: str) -> None:
-    with SessionLocal() as db:
-        user = db.get(User, user_id)
+async def update_user_login(user_id: str, token: str, last_login: str) -> None:
+    async with AsyncSessionLocal() as db:
+        user = await db.get(User, user_id)
         if not user:
             return
         user.token = token
         user.last_login_at = parse_dt(last_login)
-        db.commit()
+        await db.commit()
 
 
 @require_db
-def login_user(username: str, password: str, token: str, last_login: str) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.username == username, User.status == "active"))
+async def login_user(username: str, password: str, token: str, last_login: str) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(select(User).where(User.username == username, User.status == "active"))).scalar_one_or_none()
         if not user or not verify_password(password, user.password_hash):
             return None
         user.token = token
         user.last_login_at = parse_dt(last_login)
-        db.commit()
-        db.refresh(user)
+        await db.commit()
+        await db.refresh(user)
         return _user_dict(user)
 
 
 @require_db
-def register_user(
+async def register_user(
     username: str,
     display_name: str,
     password_hash: str,
@@ -68,7 +68,7 @@ def register_user(
     bonus_points: int = 1000,
 ) -> dict[str, Any] | None:
     ts = parse_dt(timestamp)
-    with SessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         user = User(
             id=uid("user"),
             username=username,
@@ -96,17 +96,17 @@ def register_user(
             )
         )
         try:
-            db.commit()
+            await db.commit()
         except IntegrityError:
-            db.rollback()
+            await db.rollback()
             return None
         return _user_dict(user)
 
 
 @require_db
-def change_password(user_id: str, current_password: str, new_password: str) -> str:
-    with SessionLocal() as db:
-        user = db.get(User, user_id)
+async def change_password(user_id: str, current_password: str, new_password: str) -> str:
+    async with AsyncSessionLocal() as db:
+        user = await db.get(User, user_id)
         if not user:
             return "missing"
         if not verify_password(current_password, user.password_hash):
@@ -114,5 +114,5 @@ def change_password(user_id: str, current_password: str, new_password: str) -> s
         from ...security import hash_password
 
         user.password_hash = hash_password(new_password)
-        db.commit()
+        await db.commit()
         return "ok"

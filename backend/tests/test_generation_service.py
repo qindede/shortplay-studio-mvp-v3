@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from unittest.mock import patch
 
@@ -19,7 +20,7 @@ class FakeStorage:
         cls.refunded = []
 
     @classmethod
-    def start_paid_ai_job(cls, user: dict, cost: int, scene: str, description: str, job_type: str, provider: str, **links) -> dict:
+    async def start_paid_ai_job(cls, user: dict, cost: int, scene: str, description: str, job_type: str, provider: str, **links) -> dict:
         job = {
             "id": f"job_{len(cls.jobs) + 1}",
             "user_id": user["id"],
@@ -34,12 +35,12 @@ class FakeStorage:
         return job
 
     @classmethod
-    def complete_ai_job(cls, job_id: str, output: dict | None = None) -> dict:
+    async def complete_ai_job(cls, job_id: str, output: dict | None = None) -> dict:
         cls.completed.append((job_id, output or {}))
         return {"id": job_id, "status": "succeeded", "output_json": output or {}}
 
     @classmethod
-    def fail_ai_job_with_refund(cls, job_id: str, error: str) -> dict:
+    async def fail_ai_job_with_refund(cls, job_id: str, error: str) -> dict:
         cls.refunded.append((job_id, error))
         return {"id": job_id, "status": "failed", "error": error}
 
@@ -60,10 +61,10 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
             p.stop()
 
     def test_success_completes_paid_job(self) -> None:
-        def work(job: dict):
+        async def work(job: dict):
             return {"ok": True, "job_id": job["id"]}, {"items": 2}
 
-        result = generation_service.run_paid_generation(
+        result = asyncio.run(generation_service.run_paid_generation(
             {"id": "user_1"},
             20,
             "测试场景",
@@ -72,7 +73,7 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
             "minimax",
             work,
             project_id="proj_1",
-        )
+        ))
 
         self.assertEqual(result, {"ok": True, "job_id": "job_1"})
         self.assertEqual(len(FakeStorage.jobs), 1)
@@ -84,11 +85,11 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
         class ProviderDown(AIError):
             public_message = "供应商不可用"
 
-        def work(job: dict):
+        async def work(job: dict):
             raise ProviderDown()
 
         with self.assertRaises(ProviderDown):
-            generation_service.run_paid_generation(
+            asyncio.run(generation_service.run_paid_generation(
                 {"id": "user_1"},
                 20,
                 "测试场景",
@@ -96,17 +97,17 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
                 "outline",
                 "minimax",
                 work,
-            )
+            ))
 
         self.assertEqual(FakeStorage.completed, [])
         self.assertEqual(FakeStorage.refunded, [("job_1", "供应商不可用")])
 
     def test_unexpected_error_refunds_with_fallback_message(self) -> None:
-        def work(job: dict):
+        async def work(job: dict):
             raise RuntimeError()
 
         with self.assertRaises(RuntimeError):
-            generation_service.run_paid_generation(
+            asyncio.run(generation_service.run_paid_generation(
                 {"id": "user_1"},
                 20,
                 "测试场景",
@@ -115,16 +116,16 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
                 "ffmpeg",
                 work,
                 failure_message="合成失败",
-            )
+            ))
 
         self.assertEqual(FakeStorage.completed, [])
         self.assertEqual(FakeStorage.refunded, [("job_1", "合成失败")])
 
     def test_running_generation_can_skip_completion(self) -> None:
-        def work(job: dict):
+        async def work(job: dict):
             return {"task_id": "task_1"}, {"ignored": True}
 
-        result = generation_service.run_paid_generation(
+        result = asyncio.run(generation_service.run_paid_generation(
             {"id": "user_1"},
             30,
             "生成镜头视频",
@@ -133,7 +134,7 @@ class PaidGenerationLifecycleTests(unittest.TestCase):
             "seedance",
             work,
             complete=False,
-        )
+        ))
 
         self.assertEqual(result, {"task_id": "task_1"})
         self.assertEqual(len(FakeStorage.jobs), 1)

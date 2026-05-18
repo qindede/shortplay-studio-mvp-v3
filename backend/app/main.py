@@ -26,7 +26,7 @@ from .ai.client import close_client
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from .data_io import _ensure_seed_data
-    _ensure_seed_data()
+    await _ensure_seed_data()
     yield
     close_client()
 

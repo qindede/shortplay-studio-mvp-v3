@@ -13,25 +13,25 @@ from ..errors import BadRequestError, InsufficientPointsError, NotFoundError
 from . import db
 
 
-def list_assets(user: dict[str, Any], project_id: str, asset_type: str | None = None) -> list[dict]:
-    result = db.list_assets(user, project_id, asset_type)
+async def list_assets(user: dict[str, Any], project_id: str, asset_type: str | None = None) -> list[dict]:
+    result = await db.list_assets(user, project_id, asset_type)
     if result is None:
         raise NotFoundError("项目不存在")
     return result
 
 
-def get_asset(user: dict[str, Any], asset_id: str) -> dict:
-    result = db.get_asset(user, asset_id)
+async def get_asset(user: dict[str, Any], asset_id: str) -> dict:
+    result = await db.get_asset(user, asset_id)
     if result is None:
         raise NotFoundError("素材不存在")
     return result
 
 
-def create_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
+async def create_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     refs = normalize_refs(payload.references)
     visual_asset = payload.type in {"character", "scene", "image"}
     cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
-    result = db.create_asset(user, project_id, payload, refs, cost, now())
+    result = await db.create_asset(user, project_id, payload, refs, cost, now())
     if result is None:
         raise NotFoundError("项目不存在")
     if isinstance(result, dict) and result.get("error") == "insufficient_points":
@@ -39,16 +39,16 @@ def create_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     return result
 
 
-def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
+async def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     """Generate an asset using AI image generation."""
     from ..project.service import get_project
-    project = get_project(user, project_id)
+    project = await get_project(user, project_id)
 
     visual_asset = payload.type in {"character", "scene", "image"}
     cost = POINT_RULES["image_asset"] if visual_asset else POINT_RULES["audio_asset"]
     provider = "seedream" if visual_asset else "manual"
 
-    def work(job: dict) -> tuple[dict, dict]:
+    async def work(job: dict) -> tuple[dict, dict]:
         generated_url = ai_image.generate_image(payload.prompt) if visual_asset else None
         refs = [{
             "id": uid("ref"),
@@ -57,10 +57,10 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
             "url": generated_url,
             "note": payload.prompt,
         }]
-        asset = db.generate_asset_without_charge(user, project_id, payload, generated_url, refs, now())
+        asset = await db.generate_asset_without_charge(user, project_id, payload, generated_url, refs, now())
         return asset, {"asset_id": asset["id"], "url": generated_url}
 
-    return _run_paid_generation(
+    return await _run_paid_generation(
         user,
         cost,
         "AI 生成素材",
@@ -72,23 +72,23 @@ def generate_asset(user: dict[str, Any], project_id: str, payload: Any) -> dict:
     )
 
 
-def start_voice_clone(user: dict[str, Any], asset_id: str, payload: Any) -> dict:
+async def start_voice_clone(user: dict[str, Any], asset_id: str, payload: Any) -> dict:
     """Start voice cloning for an asset."""
     if not payload.consent:
         raise BadRequestError("请确认已获得声音授权")
-    asset = get_asset(user, asset_id)
+    asset = await get_asset(user, asset_id)
     voice_url = payload.voice_url or asset.get("voice_url")
     if not voice_url or not voice_url.startswith("/uploads/"):
         raise BadRequestError("请先上传角色声音样本")
 
-    def work(job: dict) -> tuple[dict, dict]:
+    async def work(job: dict) -> tuple[dict, dict]:
         audio, _ = storage.get_object(voice_url.removeprefix("/uploads/"))
         speaker_id = asset.get("speaker_id") or f"S_{asset_id.replace('-', '_')}_{uid('voice')[-10:]}"
         result = ai_voice.clone_voice(speaker_id, audio, voice_url.rsplit(".", 1)[-1] if "." in voice_url else "wav")
-        updated = db.update_voice_clone(user, asset_id, result, 0, now(), consume=False, job_id=job["id"])
+        updated = await db.update_voice_clone(user, asset_id, result, 0, now(), consume=False, job_id=job["id"])
         return updated, {}
 
-    return _run_paid_generation(
+    return await _run_paid_generation(
         user,
         POINT_RULES["voice_clone"],
         "音色克隆",
@@ -102,23 +102,23 @@ def start_voice_clone(user: dict[str, Any], asset_id: str, payload: Any) -> dict
     )
 
 
-def update_asset(user: dict[str, Any], asset_id: str, payload: Any) -> dict:
+async def update_asset(user: dict[str, Any], asset_id: str, payload: Any) -> dict:
     refs_raw = payload.model_dump(exclude_unset=True).get("references")
     refs = normalize_refs(refs_raw) if refs_raw is not None else None
-    result = db.update_asset(user, asset_id, payload, refs, now())
+    result = await db.update_asset(user, asset_id, payload, refs, now())
     if result is None:
         raise NotFoundError("素材不存在")
     return result
 
 
-def delete_asset(user: dict[str, Any], asset_id: str) -> dict:
-    if not db.delete_asset(user, asset_id):
+async def delete_asset(user: dict[str, Any], asset_id: str) -> dict:
+    if not await db.delete_asset(user, asset_id):
         raise NotFoundError("素材不存在")
     return {"ok": True}
 
 
-def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, Any], cost: int = 0, consume: bool = True, job_id: str | None = None) -> dict:
-    updated = db.update_voice_clone(user, asset_id, result, cost, now(), consume=consume, job_id=job_id)
+async def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, Any], cost: int = 0, consume: bool = True, job_id: str | None = None) -> dict:
+    updated = await db.update_voice_clone(user, asset_id, result, cost, now(), consume=consume, job_id=job_id)
     if updated is None:
         raise NotFoundError("素材不存在")
     if isinstance(updated, dict) and updated.get("error") == "insufficient_points":
@@ -126,13 +126,13 @@ def update_voice_clone(user: dict[str, Any], asset_id: str, result: dict[str, An
     return updated
 
 
-def get_voice_clone(user: dict[str, Any], asset_id: str) -> dict:
+async def get_voice_clone(user: dict[str, Any], asset_id: str) -> dict:
     """Fetch latest voice clone status from provider and update local record."""
-    asset = get_asset(user, asset_id)
+    asset = await get_asset(user, asset_id)
     if not asset.get("speaker_id"):
         return asset
     try:
         result = ai_voice.get_voice(asset["speaker_id"])
     except AIError:
         return asset
-    return update_voice_clone(user, asset_id, result, cost=0, consume=False)
+    return await update_voice_clone(user, asset_id, result, cost=0, consume=False)

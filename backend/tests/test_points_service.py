@@ -1,33 +1,34 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.features.errors import InsufficientPointsError
 from app.features.points import service as points_service
 
 
 class EnsurePointsTests(unittest.TestCase):
-    @patch("app.features.points.db.user_has_points")
+    @patch("app.features.points.db.user_has_points", new_callable=AsyncMock)
     def test_sufficient_points_passes(self, mock_has):
         mock_has.return_value = True
-        points_service.ensure_points({"id": "user_1"}, 100)
+        asyncio.run(points_service.ensure_points({"id": "user_1"}, 100))
         mock_has.assert_called_once_with("user_1", 100)
 
-    @patch("app.features.points.db.user_has_points")
+    @patch("app.features.points.db.user_has_points", new_callable=AsyncMock)
     def test_insufficient_points_raises(self, mock_has):
         mock_has.return_value = False
         with self.assertRaises(InsufficientPointsError):
-            points_service.ensure_points({"id": "user_1"}, 100)
+            asyncio.run(points_service.ensure_points({"id": "user_1"}, 100))
 
-    @patch("app.features.points.db.user_has_points")
+    @patch("app.features.points.db.user_has_points", new_callable=AsyncMock)
     def test_zero_cost_skips_check(self, mock_has):
-        points_service.ensure_points({"id": "user_1"}, 0)
+        asyncio.run(points_service.ensure_points({"id": "user_1"}, 0))
         mock_has.assert_not_called()
 
-    @patch("app.features.points.db.user_has_points")
+    @patch("app.features.points.db.user_has_points", new_callable=AsyncMock)
     def test_negative_cost_skips_check(self, mock_has):
-        points_service.ensure_points({"id": "user_1"}, -10)
+        asyncio.run(points_service.ensure_points({"id": "user_1"}, -10))
         mock_has.assert_not_called()
 
 

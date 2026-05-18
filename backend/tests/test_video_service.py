@@ -1,48 +1,49 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.features.errors import BadRequestError, NotFoundError, ServiceUnavailableError
 from app.features.video import service as video_service
 
 
 class GenerateVideoForShotTests(unittest.TestCase):
-    @patch("app.features.shot.db.shot_generation_context")
+    @patch("app.features.shot.service.get_generation_context", new_callable=AsyncMock)
     def test_shot_not_found_raises(self, mock_ctx):
-        mock_ctx.return_value = None
+        mock_ctx.side_effect = NotFoundError("镜头不存在")
         with self.assertRaises(NotFoundError):
-            video_service.generate_video_for_shot({"id": "user_1"}, "shot_missing")
+            asyncio.run(video_service.generate_video_for_shot({"id": "user_1"}, "shot_missing"))
 
 
 class GenerateVideosForEpisodeTests(unittest.TestCase):
-    @patch("app.features.storyboard.db.episode_generation_context")
+    @patch("app.features.storyboard.service.get_episode_generation_context", new_callable=AsyncMock)
     def test_episode_not_found_raises(self, mock_ctx):
-        mock_ctx.return_value = None
+        mock_ctx.side_effect = NotFoundError("剧集不存在")
         with self.assertRaises(NotFoundError):
-            video_service.generate_videos_for_episode({"id": "user_1"}, "ep_missing")
+            asyncio.run(video_service.generate_videos_for_episode({"id": "user_1"}, "ep_missing"))
 
-    @patch("app.features.storyboard.db.episode_generation_context")
+    @patch("app.features.storyboard.service.get_episode_generation_context", new_callable=AsyncMock)
     def test_no_shots_raises(self, mock_ctx):
         mock_ctx.return_value = {"project": {}, "episode": {}, "shots": []}
         with self.assertRaises(NotFoundError):
-            video_service.generate_videos_for_episode({"id": "user_1"}, "ep_1")
+            asyncio.run(video_service.generate_videos_for_episode({"id": "user_1"}, "ep_1"))
 
 
 class ComposeEpisodeTests(unittest.TestCase):
-    @patch("app.features.video.db.compose_context")
+    @patch("app.features.video.db.compose_context", new_callable=AsyncMock)
     def test_episode_not_found_raises(self, mock_ctx):
         mock_ctx.return_value = None
         with self.assertRaises(NotFoundError):
-            video_service.compose_episode({"id": "user_1"}, "ep_missing", MagicMock(), lambda _: "url")
+            asyncio.run(video_service.compose_episode({"id": "user_1"}, "ep_missing", MagicMock(), lambda _: "url"))
 
-    @patch("app.features.video.db.compose_context")
+    @patch("app.features.video.db.compose_context", new_callable=AsyncMock)
     def test_no_shots_raises(self, mock_ctx):
         mock_ctx.return_value = {"episode": {}, "project": {}, "shots": [], "video_jobs": []}
         with self.assertRaises(BadRequestError):
-            video_service.compose_episode({"id": "user_1"}, "ep_1", MagicMock(), lambda _: "url")
+            asyncio.run(video_service.compose_episode({"id": "user_1"}, "ep_1", MagicMock(), lambda _: "url"))
 
-    @patch("app.features.video.db.compose_context")
+    @patch("app.features.video.db.compose_context", new_callable=AsyncMock)
     def test_incomplete_shots_raises(self, mock_ctx):
         mock_ctx.return_value = {
             "episode": {"title": "test"},
@@ -51,7 +52,7 @@ class ComposeEpisodeTests(unittest.TestCase):
             "video_jobs": [],
         }
         with self.assertRaises(BadRequestError):
-            video_service.compose_episode({"id": "user_1"}, "ep_1", MagicMock(), lambda _: "url")
+            asyncio.run(video_service.compose_episode({"id": "user_1"}, "ep_1", MagicMock(), lambda _: "url"))
 
 
 class ComposeVideoFileTests(unittest.TestCase):
@@ -75,23 +76,23 @@ class ComposeVideoFileTests(unittest.TestCase):
 
 
 class ListVideoJobsWithPollTests(unittest.TestCase):
-    @patch("app.features.video.service.SessionLocal")
+    @patch("app.features.video.service.AsyncSessionLocal")
     def test_episode_not_found_raises(self, mock_session_cls):
-        mock_session = MagicMock()
-        mock_session.scalar.return_value = None
-        mock_session_cls.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_session_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_session = AsyncMock()
+        mock_session.scalar = AsyncMock(return_value=None)
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         with self.assertRaises(NotFoundError):
-            video_service.list_video_jobs_with_poll({"id": "user_1"}, "ep_missing")
+            asyncio.run(video_service.list_video_jobs_with_poll({"id": "user_1"}, "ep_missing"))
 
 
 class GenerateVideoNoDoubleChargeTests(unittest.TestCase):
     """Regression: generate_video_for_shot must create exactly one AiJob and deduct points once."""
 
-    @patch("app.features.video.db.update_job_for_video_shot")
+    @patch("app.features.video.db.update_job_for_video_shot", new_callable=AsyncMock)
     @patch("app.ai.video.create_video_task", return_value="task_abc")
-    @patch("app.features.shot.db.shot_generation_context")
-    @patch("app.features.ai_job.db.SessionLocal")
+    @patch("app.features.shot.service.get_generation_context", new_callable=AsyncMock)
+    @patch("app.features.ai_job.db.AsyncSessionLocal")
     def test_single_job_single_deduction(self, mock_session_cls, mock_ctx, mock_create, mock_update):
         mock_ctx.return_value = {
             "shot": {"id": "s1", "no": 1, "title": "开场", "duration": 3, "episode_id": "ep1"},
@@ -112,14 +113,16 @@ class GenerateVideoNoDoubleChargeTests(unittest.TestCase):
         mock_user.points = 1000
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_user
-        mock_session.execute.return_value = mock_result
-        mock_session_cls.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_session_cls.return_value.__exit__ = MagicMock(return_value=False)
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.flush = AsyncMock()
+        mock_session.commit = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
         added = []
         mock_session.add.side_effect = lambda obj: added.append(obj)
 
-        result = video_service.generate_video_for_shot({"id": "user_1"}, "s1")
+        result = asyncio.run(video_service.generate_video_for_shot({"id": "user_1"}, "s1"))
 
         # Exactly one AiJob + one PointLedger = 2 adds
         from app.models import AiJob, PointLedger

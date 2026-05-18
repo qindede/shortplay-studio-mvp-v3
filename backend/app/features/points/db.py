@@ -6,12 +6,12 @@ from typing import Any
 
 from sqlalchemy import func, select
 
-from ...db import SessionLocal
+from ...db import AsyncSessionLocal
 from ...models import PointLedger, User
 from ...utils import uid, fmt_dt
 
 
-def change_points(
+async def change_points(
     db,
     user_id: str,
     amount: int,
@@ -21,7 +21,7 @@ def change_points(
     timestamp: datetime | None,
 ) -> PointLedger:
     """核心原语：修改用户积分并写入流水。调用方需传入 db session 以保证事务性。"""
-    user = db.execute(select(User).where(User.id == user_id).with_for_update()).scalar_one_or_none()
+    user = (await db.execute(select(User).where(User.id == user_id).with_for_update())).scalar_one_or_none()
     if not user:
         raise ValueError("missing_user")
     current = int(user.points or 0)
@@ -42,27 +42,27 @@ def change_points(
     return entry
 
 
-def user_has_points(user_id: str, cost: int) -> bool:
+async def user_has_points(user_id: str, cost: int) -> bool:
     if cost <= 0:
         return True
-    with SessionLocal() as db:
-        points = db.scalar(select(User.points).where(User.id == user_id))
+    async with AsyncSessionLocal() as db:
+        points = (await db.execute(select(User.points).where(User.id == user_id))).scalar_one_or_none()
         return points is not None and int(points or 0) >= cost
 
 
-def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> dict[str, Any]:
+async def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> dict[str, Any]:
     safe_page = max(1, page)
     safe_size = min(100, max(1, page_size))
     offset = (safe_page - 1) * safe_size
-    with SessionLocal() as db:
-        total = db.scalar(select(func.count(PointLedger.id)).where(PointLedger.user_id == user["id"]))
-        rows = db.scalars(
+    async with AsyncSessionLocal() as db:
+        total = (await db.execute(select(func.count(PointLedger.id)).where(PointLedger.user_id == user["id"]))).scalar_one()
+        rows = (await db.execute(
             select(PointLedger)
             .where(PointLedger.user_id == user["id"])
             .order_by(PointLedger.created_at.desc())
             .offset(offset)
             .limit(safe_size)
-        )
+        )).scalars().all()
         return {
             "items": [
                 {
@@ -84,11 +84,11 @@ def point_ledger(user: dict[str, Any], page: int = 1, page_size: int = 10) -> di
         }
 
 
-def usage(user: dict[str, Any]) -> dict[str, Any]:
+async def usage(user: dict[str, Any]) -> dict[str, Any]:
     from ...config import apply_usage_defaults
 
-    with SessionLocal() as db:
-        db_user = db.get(User, user["id"])
+    async with AsyncSessionLocal() as db:
+        db_user = await db.get(User, user["id"])
         usage_data = apply_usage_defaults(dict((db_user.usage_json if db_user else user.get("usage")) or {}))
-        usage_data["team_members"] = db.scalar(select(func.count(User.id)).where(User.status == "active"))
+        usage_data["team_members"] = (await db.execute(select(func.count(User.id)).where(User.status == "active"))).scalar_one()
         return usage_data

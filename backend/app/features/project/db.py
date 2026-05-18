@@ -6,17 +6,17 @@ from typing import Any
 from sqlalchemy import func, select, text
 
 from ...config import STATUS_LABEL
-from ...db import SessionLocal, require_db
+from ...db import AsyncSessionLocal, require_db
 from ...models import Asset, Episode, Project, VideoVersion
 from ...serializers import _project_dict
 from ...utils import fmt_dt, parse_dt, uid
 
 
 @require_db
-def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
+async def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
 
-    with SessionLocal() as db:
-        rows = db.execute(
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
             text(
                 """
                 SELECT
@@ -39,7 +39,7 @@ def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
                 """
             ),
             {"user_id": user["id"]},
-        ).mappings()
+        )).mappings()
         return [
             {
                 "id": row["id"],
@@ -63,21 +63,21 @@ def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 @require_db
-def get_project(user: dict[str, Any], project_id: str) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        project = db.scalar(
+async def get_project(user: dict[str, Any], project_id: str) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        project = await db.scalar(
             select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"])
         )
         if not project:
             return None
-        episode_count = db.scalar(select(func.count(Episode.id)).where(Episode.project_id == project_id)) or 0
-        asset_count = db.scalar(select(func.count(Asset.id)).where(Asset.project_id == project_id)) or 0
-        version_count = db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.project_id == project_id)) or 0
+        episode_count = await db.scalar(select(func.count(Episode.id)).where(Episode.project_id == project_id)) or 0
+        asset_count = await db.scalar(select(func.count(Asset.id)).where(Asset.project_id == project_id)) or 0
+        version_count = await db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.project_id == project_id)) or 0
         return _project_dict(project, episode_count, asset_count, version_count)
 
 
 @require_db
-def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[str, Any]:
+async def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[str, Any]:
     ts = parse_dt(timestamp)
     project = Project(
         id=uid("proj"),
@@ -90,9 +90,9 @@ def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[s
         created_at=ts,
         updated_at=ts,
     )
-    with SessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         db.add(project)
-        db.flush()
+        await db.flush()
         for index, item in enumerate(payload.episodes, start=1):
             db.add(
                 Episode(
@@ -107,14 +107,14 @@ def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[s
                     updated_at=ts,
                 )
             )
-        db.commit()
+        await db.commit()
         return _project_dict(project, len(payload.episodes), 0, 0) | {"owner": user.get("display_name", "")}
 
 
 @require_db
-def update_project(user: dict[str, Any], project_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
+async def update_project(user: dict[str, Any], project_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        project = await db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not project:
             return None
         updates = payload.model_dump(exclude_none=True)
@@ -126,16 +126,16 @@ def update_project(user: dict[str, Any], project_id: str, payload: Any, timestam
         if "status" in updates:
             project.status = updates["status"]
         project.updated_at = parse_dt(timestamp)
-        db.commit()
-        return get_project(user, project_id)
+        await db.commit()
+        return await get_project(user, project_id)
 
 
 @require_db
-def delete_project(user: dict[str, Any], project_id: str) -> bool:
-    with SessionLocal() as db:
-        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
+async def delete_project(user: dict[str, Any], project_id: str) -> bool:
+    async with AsyncSessionLocal() as db:
+        project = await db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not project:
             return False
-        db.delete(project)
-        db.commit()
+        await db.delete(project)
+        await db.commit()
         return True

@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import delete, select
 
 from .config import DEFAULT_USAGE
-from .db import SessionLocal
+from .db import AsyncSessionLocal
 from .models import (
     AiJob,
     Asset,
@@ -23,10 +23,10 @@ from .models import (
 from .utils import fmt_dt, parse_dt, uid
 
 
-def _ensure_seed_data() -> None:
+async def _ensure_seed_data() -> None:
     """Create default users and load seed data if the database is empty."""
-    with SessionLocal() as db:
-        has_users = db.scalar(select(User.id).limit(1))
+    async with AsyncSessionLocal() as db:
+        has_users = await db.scalar(select(User.id).limit(1))
         if has_users:
             return
         from .security import hash_password
@@ -42,15 +42,15 @@ def _ensure_seed_data() -> None:
                 role=role, status="active", points=points, token=None,
                 usage_json={}, created_at=ts, last_login_at=None,
             ))
-        db.commit()
+        await db.commit()
     from .data_io import save_data
-    save_data(seed_data())
+    await save_data(seed_data())
 
 
-def load_data() -> dict[str, Any]:
-    _ensure_seed_data()
-    with SessionLocal() as db:
-        users = list(db.scalars(select(User)))
+async def load_data() -> dict[str, Any]:
+    await _ensure_seed_data()
+    async with AsyncSessionLocal() as db:
+        users = list(await db.scalars(select(User)))
         user_by_id = {user.id: user for user in users}
 
         projects = [
@@ -67,7 +67,7 @@ def load_data() -> dict[str, Any]:
                 "created_at": fmt_dt(row.created_at),
                 "updated_at": fmt_dt(row.updated_at),
             }
-            for row in db.scalars(select(Project))
+            for row in await db.scalars(select(Project))
         ]
         episodes = [
             {
@@ -81,7 +81,7 @@ def load_data() -> dict[str, Any]:
                 "status": row.status,
                 "updated_at": fmt_dt(row.updated_at),
             }
-            for row in db.scalars(select(Episode))
+            for row in await db.scalars(select(Episode))
         ]
         shots = [
             {
@@ -97,11 +97,11 @@ def load_data() -> dict[str, Any]:
                 "status": row.status,
                 "updated_at": fmt_dt(row.updated_at),
             }
-            for row in db.scalars(select(Shot))
+            for row in await db.scalars(select(Shot))
         ]
 
         refs_by_asset: dict[str, list[dict]] = defaultdict(list)
-        for ref in db.scalars(select(AssetReference).order_by(AssetReference.sort_order)):
+        for ref in await db.scalars(select(AssetReference).order_by(AssetReference.sort_order)):
             refs_by_asset[ref.asset_id].append(
                 {
                     "id": ref.id,
@@ -128,7 +128,7 @@ def load_data() -> dict[str, Any]:
                 "references": refs_by_asset.get(row.id, []),
                 "updated_at": fmt_dt(row.updated_at),
             }
-            for row in db.scalars(select(Asset))
+            for row in await db.scalars(select(Asset))
         ]
         video_versions = [
             {
@@ -145,10 +145,10 @@ def load_data() -> dict[str, Any]:
                 "video_url": row.video_url,
                 "created_at": fmt_dt(row.created_at),
             }
-            for row in db.scalars(select(VideoVersion))
+            for row in await db.scalars(select(VideoVersion))
         ]
         point_ledger = []
-        for row in db.scalars(select(PointLedger).order_by(PointLedger.created_at.desc())):
+        for row in await db.scalars(select(PointLedger).order_by(PointLedger.created_at.desc())):
             ledger_user = user_by_id.get(row.user_id)
             point_ledger.append(
                 {
@@ -186,7 +186,7 @@ def load_data() -> dict[str, Any]:
                 "updated_at": fmt_dt(row.updated_at),
                 "completed_at": fmt_dt(row.completed_at),
             }
-            for row in db.scalars(select(AiJob).order_by(AiJob.created_at.desc()))
+            for row in await db.scalars(select(AiJob).order_by(AiJob.created_at.desc()))
         ]
         user_rows = [
             {
@@ -224,14 +224,14 @@ def load_data() -> dict[str, Any]:
         }
 
 
-def save_data(data: dict[str, Any]) -> None:
-    with SessionLocal() as db:
+async def save_data(data: dict[str, Any]) -> None:
+    async with AsyncSessionLocal() as db:
         for model in [PointLedger, VideoVersion, AiJob, AssetReference, Asset, Shot, Episode, Project]:
-            db.execute(delete(model))
-        db.flush()
+            await db.execute(delete(model))
+        await db.flush()
 
         for item in data.get("users", []):
-            db.merge(
+            await db.merge(
                 User(
                     id=item["id"],
                     username=item["username"],
@@ -246,7 +246,7 @@ def save_data(data: dict[str, Any]) -> None:
                     last_login_at=parse_dt(item.get("last_login")),
                 )
             )
-        db.flush()
+        await db.flush()
         for item in data.get("projects", []):
             db.add(
                 Project(
@@ -262,7 +262,7 @@ def save_data(data: dict[str, Any]) -> None:
                     updated_at=parse_dt(item.get("updated_at")),
                 )
             )
-        db.flush()
+        await db.flush()
         for item in data.get("episodes", []):
             db.add(
                 Episode(
@@ -277,7 +277,7 @@ def save_data(data: dict[str, Any]) -> None:
                     updated_at=parse_dt(item.get("updated_at")),
                 )
             )
-        db.flush()
+        await db.flush()
         for item in data.get("shots", []):
             db.add(
                 Shot(
@@ -294,7 +294,7 @@ def save_data(data: dict[str, Any]) -> None:
                     updated_at=parse_dt(item.get("updated_at")),
                 )
             )
-        db.flush()
+        await db.flush()
         for item in data.get("assets", []):
             db.add(
                 Asset(
@@ -326,7 +326,7 @@ def save_data(data: dict[str, Any]) -> None:
                         sort_order=index,
                     )
                 )
-        db.flush()
+        await db.flush()
         for item in data.get("ai_jobs", []):
             db.add(
                 AiJob(
@@ -350,7 +350,7 @@ def save_data(data: dict[str, Any]) -> None:
                     completed_at=parse_dt(item.get("completed_at")),
                 )
             )
-        db.flush()
+        await db.flush()
         for item in data.get("video_versions", []):
             db.add(
                 VideoVersion(
@@ -382,4 +382,4 @@ def save_data(data: dict[str, Any]) -> None:
                     created_at=parse_dt(item.get("created_at")),
                 )
             )
-        db.commit()
+        await db.commit()

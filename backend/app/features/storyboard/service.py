@@ -11,22 +11,22 @@ from ..errors import InsufficientPointsError, NotFoundError, ServiceUnavailableE
 from . import db
 
 
-def get_episode_generation_context(user: dict, episode_id: str) -> dict:
-    context = db.episode_generation_context(user, episode_id)
+async def get_episode_generation_context(user: dict, episode_id: str) -> dict:
+    context = await db.episode_generation_context(user, episode_id)
     if context is None:
         raise NotFoundError("剧集不存在")
     return context
 
 
-def generate_project_outline(user: dict, payload: OutlineGenerateRequest) -> dict:
+async def generate_project_outline(user: dict, payload: OutlineGenerateRequest) -> dict:
     """Generate a project outline via AI, charging points through the paid generation flow."""
     cost = POINT_RULES["outline"]
 
-    def work(job: dict) -> tuple[dict, dict]:
+    async def work(job: dict) -> tuple[dict, dict]:
         episodes = ai_llm.generate_outline(payload)
         return {"cost": cost, "episodes": episodes}, {"episode_count": len(episodes)}
 
-    return _run_paid_generation(
+    return await _run_paid_generation(
         user,
         cost,
         "生成短剧大纲",
@@ -63,9 +63,9 @@ def _generated_asset_payload(project_id: str, payload: dict, generated_url: str 
     }
 
 
-def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerateRequest | None = None) -> list[dict]:
+async def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerateRequest | None = None) -> list[dict]:
     """Generate storyboard shots and any missing assets via AI, persisting through save_storyboard."""
-    context = db.episode_generation_context(user, episode_id)
+    context = await db.episode_generation_context(user, episode_id)
     if not context:
         raise NotFoundError("剧集不存在")
 
@@ -80,13 +80,13 @@ def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerate
     assets_to_generate = [item for item in confirmed_assets if item["name"].strip() not in existing_names]
     total_cost = POINT_RULES["storyboard"] + len(assets_to_generate) * POINT_RULES["image_asset"]
 
-    def work(job: dict) -> tuple[list[dict], dict]:
+    async def work(job: dict) -> tuple[list[dict], dict]:
         generated_assets = []
         for item in assets_to_generate:
             generated_url = ai_image.generate_image(item["prompt"])
             generated_assets.append(_generated_asset_payload(context["project"]["id"], item, generated_url))
         ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], existing_assets + generated_assets)
-        shots = db.save_storyboard(
+        shots = await db.save_storyboard(
             user,
             episode_id,
             ai_shots,
@@ -102,7 +102,7 @@ def generate_storyboard(user: dict, episode_id: str, payload: StoryboardGenerate
             raise InsufficientPointsError("积分不足")
         return shots, {"shot_count": len(shots), "generated_asset_count": len(generated_assets)}
 
-    return _run_paid_generation(
+    return await _run_paid_generation(
         user,
         total_cost,
         "生成分镜",
@@ -151,15 +151,15 @@ def storyboard_missing_assets(ai_shots: list[dict], assets: list[dict]) -> list[
     return missing
 
 
-def prepare_storyboard(user: dict, episode_id: str) -> dict:
+async def prepare_storyboard(user: dict, episode_id: str) -> dict:
     """Preview endpoint: generate storyboard without persisting, return cost + missing assets."""
     from ...ai.errors import AIError
     from ..points.service import ensure_points
 
-    context = db.episode_generation_context(user, episode_id)
+    context = await db.episode_generation_context(user, episode_id)
     if not context:
         raise NotFoundError("剧集不存在")
-    ensure_points(user, POINT_RULES["storyboard"])
+    await ensure_points(user, POINT_RULES["storyboard"])
     try:
         ai_shots = ai_llm.generate_storyboard(context["project"], context["episode"], context["assets"])
     except AIError as exc:

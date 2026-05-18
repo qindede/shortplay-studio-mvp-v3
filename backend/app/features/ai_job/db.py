@@ -6,13 +6,13 @@ from typing import Any
 
 from sqlalchemy import select
 
-from ...db import SessionLocal
+from ...db import AsyncSessionLocal
 from ...models import AiJob, PointLedger, Project, User
 from ...serializers import _ai_job_dict
 from ...utils import uid
 
 
-def add_ai_job(
+async def add_ai_job(
     db,
     user_id: str,
     job_type: str,
@@ -47,7 +47,7 @@ def add_ai_job(
     return job
 
 
-def consume_with_job(
+async def consume_with_job(
     user_id: str,
     amount: int,
     ledger_scene: str,
@@ -64,17 +64,17 @@ def consume_with_job(
     from ..points.db import change_points
 
     ts = parse_dt(timestamp)
-    with SessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         try:
-            change_points(db, user_id, -amount, "consume", ledger_scene, ledger_description, ts)
+            await change_points(db, user_id, -amount, "consume", ledger_scene, ledger_description, ts)
         except ValueError as exc:
             return {"error": str(exc)}
-        job = add_ai_job(db, user_id, job_type, provider, amount, ts, status=status, progress=progress, provider_task_id=provider_task_id, **links)
-        db.commit()
+        job = await add_ai_job(db, user_id, job_type, provider, amount, ts, status=status, progress=progress, provider_task_id=provider_task_id, **links)
+        await db.commit()
         return {"job": _ai_job_dict(job)}
 
 
-def start_paid_ai_job(
+async def start_paid_ai_job(
     user_id: str,
     amount: int,
     ledger_scene: str,
@@ -88,24 +88,24 @@ def start_paid_ai_job(
     from ..points.db import change_points
 
     ts = parse_dt(timestamp)
-    with SessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         try:
-            ledger = change_points(db, user_id, -amount, "consume", ledger_scene, ledger_description, ts)
+            ledger = await change_points(db, user_id, -amount, "consume", ledger_scene, ledger_description, ts)
         except ValueError as exc:
             return {"error": str(exc)}
-        job = add_ai_job(db, user_id, job_type, provider, amount, ts, status="running", progress=0, **links)
-        db.flush()
+        job = await add_ai_job(db, user_id, job_type, provider, amount, ts, status="running", progress=0, **links)
+        await db.flush()
         ledger.ai_job_id = job.id
-        db.commit()
+        await db.commit()
         return {"job": _ai_job_dict(job)}
 
 
-def complete_ai_job(job_id: str, timestamp: str, output: dict[str, Any] | None = None) -> dict[str, Any] | None:
+async def complete_ai_job(job_id: str, timestamp: str, output: dict[str, Any] | None = None) -> dict[str, Any] | None:
     from ...utils import parse_dt
 
     ts = parse_dt(timestamp)
-    with SessionLocal() as db:
-        job = db.get(AiJob, job_id)
+    async with AsyncSessionLocal() as db:
+        job = await db.get(AiJob, job_id)
         if not job:
             return None
         job.status = "succeeded"
@@ -114,17 +114,17 @@ def complete_ai_job(job_id: str, timestamp: str, output: dict[str, Any] | None =
         job.output_json = output or {}
         job.updated_at = ts
         job.completed_at = ts
-        db.commit()
-        db.refresh(job)
+        await db.commit()
+        await db.refresh(job)
         return _ai_job_dict(job)
 
 
-def fail_ai_job_with_refund(job_id: str, error: str, timestamp: str) -> dict[str, Any] | None:
+async def fail_ai_job_with_refund(job_id: str, error: str, timestamp: str) -> dict[str, Any] | None:
     from ...utils import parse_dt
 
     ts = parse_dt(timestamp)
-    with SessionLocal() as db:
-        job = db.get(AiJob, job_id)
+    async with AsyncSessionLocal() as db:
+        job = await db.get(AiJob, job_id)
         if not job:
             return None
         previous_status = job.status
@@ -136,7 +136,7 @@ def fail_ai_job_with_refund(job_id: str, error: str, timestamp: str) -> dict[str
         cost = int(job.cost_points or 0)
         should_refund = previous_status not in {"failed", "cancelled"} and cost > 0
         if should_refund:
-            user = db.execute(select(User).where(User.id == job.user_id).with_for_update()).scalar_one_or_none()
+            user = (await db.execute(select(User).where(User.id == job.user_id).with_for_update())).scalar_one_or_none()
             if user:
                 user.points = int(user.points or 0) + cost
                 db.add(
@@ -152,14 +152,14 @@ def fail_ai_job_with_refund(job_id: str, error: str, timestamp: str) -> dict[str
                         created_at=ts,
                     )
                 )
-        db.commit()
-        db.refresh(job)
+        await db.commit()
+        await db.refresh(job)
         return _ai_job_dict(job)
 
 
-def get_ai_job(user: dict[str, Any], job_id: str) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        job = db.get(AiJob, job_id)
+async def get_ai_job(user: dict[str, Any], job_id: str) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        job = await db.get(AiJob, job_id)
         if not job:
             return None
         if job.user_id != user["id"] and user.get("role") != "admin":
@@ -167,10 +167,10 @@ def get_ai_job(user: dict[str, Any], job_id: str) -> dict[str, Any] | None:
         return _ai_job_dict(job)
 
 
-def list_project_ai_jobs(user: dict[str, Any], project_id: str) -> list[dict[str, Any]] | None:
-    with SessionLocal() as db:
-        owned = db.scalar(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))
+async def list_project_ai_jobs(user: dict[str, Any], project_id: str) -> list[dict[str, Any]] | None:
+    async with AsyncSessionLocal() as db:
+        owned = (await db.execute(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))).scalar_one_or_none()
         if not owned:
             return None
-        jobs = db.scalars(select(AiJob).where(AiJob.project_id == project_id).order_by(AiJob.created_at.desc()).limit(100))
+        jobs = (await db.execute(select(AiJob).where(AiJob.project_id == project_id).order_by(AiJob.created_at.desc()).limit(100))).scalars().all()
         return [_ai_job_dict(job) for job in jobs]

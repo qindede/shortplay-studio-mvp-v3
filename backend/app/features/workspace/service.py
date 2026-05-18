@@ -6,16 +6,16 @@ from ..errors import NotFoundError
 from . import db
 
 
-def dashboard(user: dict[str, Any]) -> dict[str, Any]:
-    return db.dashboard(user)
+async def dashboard(user: dict[str, Any]) -> dict[str, Any]:
+    return await db.dashboard(user)
 
 
-def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
-    return db.workspace_bootstrap(user)
+async def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
+    return await db.workspace_bootstrap(user)
 
 
-def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any]:
-    result = db.episode_workspace(user, episode_id)
+async def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any]:
+    result = await db.episode_workspace(user, episode_id)
     if result is None:
         raise NotFoundError( "剧集不存在")
     return result

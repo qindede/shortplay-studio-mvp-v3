@@ -6,20 +6,20 @@ from typing import Any
 from sqlalchemy import func, select, text
 
 from ...config import STATUS_LABEL
-from ...db import SessionLocal, require_db
+from ...db import AsyncSessionLocal, require_db
 from ...models import Episode, Project, Shot, VideoVersion
 from ...serializers import _episode_dict
 from ...utils import fmt_dt, parse_dt, uid
 
 
 @require_db
-def list_episodes(user: dict[str, Any], project_id: str) -> list[dict[str, Any]] | None:
+async def list_episodes(user: dict[str, Any], project_id: str) -> list[dict[str, Any]] | None:
 
-    with SessionLocal() as db:
-        owned = db.scalar(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))
+    async with AsyncSessionLocal() as db:
+        owned = await db.scalar(select(Project.id).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not owned:
             return None
-        rows = db.execute(
+        rows = (await db.execute(
             text(
                 """
                 SELECT
@@ -40,7 +40,7 @@ def list_episodes(user: dict[str, Any], project_id: str) -> list[dict[str, Any]]
                 """
             ),
             {"project_id": project_id},
-        ).mappings()
+        )).mappings()
         return [
             {
                 "id": row["id"],
@@ -61,28 +61,28 @@ def list_episodes(user: dict[str, Any], project_id: str) -> list[dict[str, Any]]
 
 
 @require_db
-def get_episode(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
-    with SessionLocal() as db:
-        episode = db.scalar(
+async def get_episode(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
+    async with AsyncSessionLocal() as db:
+        episode = await db.scalar(
             select(Episode)
             .join(Project, Project.id == Episode.project_id)
             .where(Episode.id == episode_id, Project.owner_user_id == user["id"])
         )
         if not episode:
             return None
-        shot_count = db.scalar(select(func.count(Shot.id)).where(Shot.episode_id == episode.id))
-        version_count = db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.episode_id == episode.id))
+        shot_count = await db.scalar(select(func.count(Shot.id)).where(Shot.episode_id == episode.id))
+        version_count = await db.scalar(select(func.count(VideoVersion.id)).where(VideoVersion.episode_id == episode.id))
         return _episode_dict(episode, shot_count, version_count)
 
 
 @require_db
-def create_episode(user: dict[str, Any], project_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
+async def create_episode(user: dict[str, Any], project_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
     ts = parse_dt(timestamp)
-    with SessionLocal() as db:
-        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
+    async with AsyncSessionLocal() as db:
+        project = await db.scalar(select(Project).where(Project.id == project_id, Project.owner_user_id == user["id"]))
         if not project:
             return None
-        next_no = (db.scalar(select(func.max(Episode.no)).where(Episode.project_id == project_id)) or 0) + 1
+        next_no = (await db.scalar(select(func.max(Episode.no)).where(Episode.project_id == project_id)) or 0) + 1
         episode = Episode(
             id=uid("ep"),
             project_id=project_id,
@@ -96,15 +96,15 @@ def create_episode(user: dict[str, Any], project_id: str, payload: Any, timestam
         )
         project.updated_at = ts
         db.add(episode)
-        db.commit()
+        await db.commit()
         return _episode_dict(episode)
 
 
 @require_db
-def update_episode(user: dict[str, Any], episode_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
+async def update_episode(user: dict[str, Any], episode_id: str, payload: Any, timestamp: str) -> dict[str, Any] | None:
     ts = parse_dt(timestamp)
-    with SessionLocal() as db:
-        episode = db.scalar(
+    async with AsyncSessionLocal() as db:
+        episode = await db.scalar(
             select(Episode)
             .join(Project, Project.id == Episode.project_id)
             .where(Episode.id == episode_id, Project.owner_user_id == user["id"])
@@ -116,17 +116,17 @@ def update_episode(user: dict[str, Any], episode_id: str, payload: Any, timestam
             if field in updates:
                 setattr(episode, field, updates[field])
         episode.updated_at = ts
-        project = db.get(Project, episode.project_id)
+        project = await db.get(Project, episode.project_id)
         if project:
             project.updated_at = ts
-        db.commit()
-        return get_episode(user, episode_id)
+        await db.commit()
+        return await get_episode(user, episode_id)
 
 
 @require_db
-def delete_episode(user: dict[str, Any], episode_id: str, timestamp: str) -> tuple[bool, str | None]:
-    with SessionLocal() as db:
-        episode = db.scalar(
+async def delete_episode(user: dict[str, Any], episode_id: str, timestamp: str) -> tuple[bool, str | None]:
+    async with AsyncSessionLocal() as db:
+        episode = await db.scalar(
             select(Episode)
             .join(Project, Project.id == Episode.project_id)
             .where(Episode.id == episode_id, Project.owner_user_id == user["id"])
@@ -135,11 +135,11 @@ def delete_episode(user: dict[str, Any], episode_id: str, timestamp: str) -> tup
             return False, None
         project_id = episode.project_id
         removed_no = episode.no
-        db.delete(episode)
-        for item in db.scalars(select(Episode).where(Episode.project_id == project_id, Episode.no > removed_no)):
+        await db.delete(episode)
+        for item in await db.scalars(select(Episode).where(Episode.project_id == project_id, Episode.no > removed_no)):
             item.no -= 1
-        project = db.get(Project, project_id)
+        project = await db.get(Project, project_id)
         if project:
             project.updated_at = parse_dt(timestamp)
-        db.commit()
+        await db.commit()
         return True, project_id

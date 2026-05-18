@@ -10,16 +10,16 @@ from typing import Any
 from sqlalchemy import text
 
 from ...config import apply_usage_defaults, STATUS_LABEL
-from ...db import SessionLocal, require_db
+from ...db import AsyncSessionLocal, require_db
 from ...utils import fmt_dt
 
 
 @require_db
-def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
+async def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
 
-    with SessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         usage = apply_usage_defaults({**(user.get("usage") or {})})
-        row = db.execute(
+        row = (await db.execute(
             text(
                 """
                 WITH user_projects AS (
@@ -231,7 +231,7 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
                 "username": user.get("username", ""),
                 "display_name": user.get("display_name", ""),
             },
-        ).mappings().one()
+        )).mappings().one()
 
         projects = list(row["projects"] or [])
         project_episodes = list(row["episodes"] or [])
@@ -271,10 +271,10 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
 
 
 @require_db
-def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
+async def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] | None:
 
-    with SessionLocal() as db:
-        row = db.execute(
+    async with AsyncSessionLocal() as db:
+        row = (await db.execute(
             text(
                 """
                 WITH target_episode AS (
@@ -356,7 +356,7 @@ def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] |
                 """
             ),
             {"episode_id": episode_id, "user_id": user["id"]},
-        ).mappings().one()
+        )).mappings().one()
         if int(row["found"] or 0) == 0:
             return None
         return {
@@ -367,11 +367,11 @@ def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] |
 
 
 @require_db
-def dashboard(user: dict[str, Any]) -> dict[str, Any]:
+async def dashboard(user: dict[str, Any]) -> dict[str, Any]:
 
-    with SessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         usage = apply_usage_defaults({**(user.get("usage") or {})})
-        row = db.execute(
+        row = (await db.execute(
             text(
                 """
                 WITH user_projects AS (
@@ -388,7 +388,7 @@ def dashboard(user: dict[str, Any]) -> dict[str, Any]:
                 """
             ),
             {"user_id": user["id"]},
-        ).mappings().one()
+        )).mappings().one()
         usage["team_members"] = int(row["team_members"] or 0)
         return {
             "project_count": int(row["project_count"] or 0),
