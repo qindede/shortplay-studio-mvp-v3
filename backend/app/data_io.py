@@ -32,12 +32,12 @@ def _ensure_seed_data() -> None:
         from .security import hash_password
         from .seed_data import seed_data
         ts = datetime.now()
-        for username, display_name, role, points in [
-            ("admin", "管理员", "admin", 100000),
-            ("demo", "演示用户", "user", 2000),
+        for user_id, username, display_name, role, points in [
+            ("user_admin", "admin", "管理员", "admin", 100000),
+            ("user_demo", "demo", "演示用户", "user", 2000),
         ]:
             db.add(User(
-                id=uid("user"), username=username, display_name=display_name,
+                id=user_id, username=username, display_name=display_name,
                 password_hash=hash_password("admin123" if role == "admin" else "demo123"),
                 role=role, status="active", points=points, token=None,
                 usage_json={}, created_at=ts, last_login_at=None,
