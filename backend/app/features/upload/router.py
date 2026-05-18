@@ -14,7 +14,7 @@ ALLOWED_TYPES = {
 }
 MAX_SIZE = 10 * 1024 * 1024  # 10MB
 
-router = APIRouter(prefix="/api", tags=["upload"])
+router = APIRouter(tags=["upload"])
 
 
 @router.post("/upload")

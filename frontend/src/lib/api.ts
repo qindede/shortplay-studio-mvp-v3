@@ -345,7 +345,7 @@ export const api = {
   upload: async (file: File): Promise<{ url: string }> => {
     const form = new FormData();
     form.append('file', file);
-    const response = await fetch(`${API_BASE}/api/upload`, {
+    const response = await fetch(`${API_BASE}/upload`, {
       method: 'POST',
       headers: { ...(authToken ? { 'X-User-Token': authToken } : {}) },
       body: form
