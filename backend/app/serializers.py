@@ -124,6 +124,15 @@ def _asset_dict(row: Asset, refs: list[dict] | None = None) -> dict[str, Any]:
     }
 
 
+_VIDEO_JOB_STATUS_MAP = {
+    "pending": "pending",
+    "running": "generating",
+    "succeeded": "completed",
+    "failed": "failed",
+    "cancelled": "failed",
+}
+
+
 def _video_job_dict(job: AiJob, shot: Shot | None = None) -> dict[str, Any]:
     output = job.output_json or {}
     return {
@@ -133,7 +142,7 @@ def _video_job_dict(job: AiJob, shot: Shot | None = None) -> dict[str, Any]:
         "title": shot.title if shot else "",
         "duration": shot.duration if shot else 0,
         "progress": job.progress,
-        "status": job.status,
+        "status": _VIDEO_JOB_STATUS_MAP.get(job.status, job.status),
         "provider": job.provider,
         "provider_task_id": job.provider_task_id,
         "preview_url": output.get("preview_url"),
