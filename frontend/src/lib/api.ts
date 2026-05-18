@@ -370,9 +370,9 @@ export const api = {
   adminUsers: () => request<User[]>('/api/admin/users'),
   adminLedger: (userId?: string) => request<PointLedger[]>(`/api/admin/point-ledger${userId ? `?user_id=${userId}` : ''}`),
   adminAdjustPoints: (userId: string, body: { amount: number; reason: string }) =>
-    request<{ entry: PointLedger; user: User }>(`/api/admin/users/${userId}/points`, { method: 'POST', body: JSON.stringify(body) }),
+    request<{ entry: PointLedger; user: User }>(`/api/admin/users/${userId}/adjust-points`, { method: 'POST', body: JSON.stringify(body) }),
   adminUpdateUser: (userId: string, body: { role?: UserRole; status?: UserStatus }) =>
     request<User>(`/api/admin/users/${userId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   adminResetPassword: (userId: string, body: { password: string }) =>
-    request<{ user: User }>(`/api/admin/users/${userId}/password`, { method: 'PATCH', body: JSON.stringify(body) })
+    request<{ user: User }>(`/api/admin/users/${userId}/reset-password`, { method: 'POST', body: JSON.stringify(body) })
 };

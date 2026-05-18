@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 import tempfile
 from collections.abc import Callable
@@ -19,6 +20,8 @@ from ..ai_job.service import run_paid_generation as _run_paid_generation
 from ..errors import BadRequestError, NotFoundError, ServiceUnavailableError
 from ...utils import now
 from . import db
+
+_log = logging.getLogger(__name__)
 
 
 def _video_cost(shot: dict) -> int:
@@ -191,8 +194,8 @@ def list_video_jobs_with_poll(user: dict, episode_id: str) -> list[dict]:
                     job = session.get(AiJob, job.id)
                     if not job:
                         continue
-            except AIError:
-                pass
+            except AIError as exc:
+                _log.warning("video poll failed for job %s: %s", job.id, exc)
         shot = shots.get(job.shot_id)
         result.append(_video_job_dict(job, shot))
 
