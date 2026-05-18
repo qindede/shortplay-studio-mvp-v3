@@ -12,34 +12,39 @@ from ...serializers import _asset_dict, _episode_dict, _project_dict, _shot_dict
 from ...utils import fmt_dt, parse_dt, uid
 
 
-@require_db
-def create_video_job(user: dict[str, Any], shot_id: str, provider_task_id: str, cost_per_second: int, timestamp: str) -> dict[str, Any] | None:
-    from ..points.db import change_points
-    from ..ai_job.db import add_ai_job
+# Provider status → AiJob status mapping
+_PROVIDER_STATUS_MAP = {
+    "pending": "running",
+    "running": "running",
+    "generating": "running",
+    "completed": "succeeded",
+    "failed": "failed",
+}
 
-    ts = parse_dt(timestamp)
+
+@require_db
+def update_job_for_video_shot(job_id: str, shot_id: str, provider_task_id: str, timestamp: datetime) -> dict[str, Any] | None:
+    """Update an existing AiJob (created by _run_paid_generation) with provider info and shot state."""
+    ts = parse_dt(timestamp) if isinstance(timestamp, str) else timestamp
     with SessionLocal() as db:
+        job = db.get(AiJob, job_id)
+        if not job:
+            return None
         shot = db.scalar(
             select(Shot)
             .join(Episode, Episode.id == Shot.episode_id)
             .join(Project, Project.id == Episode.project_id)
-            .where(Shot.id == shot_id, Project.owner_user_id == user["id"])
+            .where(Shot.id == shot_id, Project.owner_user_id == job.user_id)
         )
         if not shot:
             return None
+        job.provider_task_id = provider_task_id
+        job.shot_id = shot.id
+        job.episode_id = shot.episode_id
         episode = db.get(Episode, shot.episode_id)
-        duration = max(1, int(shot.duration))
-        cost = duration * cost_per_second
-        try:
-            change_points(db, user["id"], -cost, "consume", "生成镜头视频", f"生成镜头 #{shot.no}《{shot.title}》，{duration}s", ts)
-        except ValueError as exc:
-            return {"error": str(exc)}
-        job = add_ai_job(
-            db, user["id"], "video_shot", "seedance", cost, ts,
-            status="running", progress=0, provider_task_id=provider_task_id,
-            episode_id=shot.episode_id, shot_id=shot.id,
-            project_id=episode.project_id if episode else None,
-        )
+        if episode:
+            job.project_id = episode.project_id
+        job.updated_at = ts
         shot.status = "generating"
         shot.updated_at = ts
         if episode:
@@ -52,104 +57,73 @@ def create_video_job(user: dict[str, Any], shot_id: str, provider_task_id: str, 
 
 
 @require_db
-def batch_create_video_jobs(user: dict[str, Any], provider_tasks: dict[str, str], cost_per_second: int, timestamp: str) -> tuple[list[dict], str | None]:
-    """Create multiple video jobs in a single transaction.
-
-    Returns (jobs, error). If any shot fails due to insufficient points,
-    returns the error string and no jobs are created.
-    """
-    from ..points.db import change_points
-    from ..ai_job.db import add_ai_job
-
-    ts = parse_dt(timestamp)
-    with SessionLocal() as db:
-        jobs = []
-        for shot_id, provider_task_id in provider_tasks.items():
-            shot = db.scalar(
-                select(Shot)
-                .join(Episode, Episode.id == Shot.episode_id)
-                .join(Project, Project.id == Episode.project_id)
-                .where(Shot.id == shot_id, Project.owner_user_id == user["id"])
-            )
-            if not shot:
-                continue
-            episode = db.get(Episode, shot.episode_id)
-            duration = max(1, int(shot.duration))
-            cost = duration * cost_per_second
-            try:
-                change_points(db, user["id"], -cost, "consume", "生成镜头视频", f"生成镜头 #{shot.no}《{shot.title}》，{duration}s", ts)
-            except ValueError as exc:
-                db.rollback()
-                return [], str(exc)
-            job = add_ai_job(
-                db, user["id"], "video_shot", "seedance", cost, ts,
-                status="running", progress=0, provider_task_id=provider_task_id,
-                episode_id=shot.episode_id, shot_id=shot.id,
-                project_id=episode.project_id if episode else None,
-            )
-            shot.status = "generating"
-            shot.updated_at = ts
-            if episode:
-                episode.updated_at = ts
-                project = db.get(Project, episode.project_id)
-                if project:
-                    project.updated_at = ts
-            jobs.append((job, shot))
-        db.commit()
-        return [_video_job_dict(j, s) for j, s in jobs], None
-
-
-@require_db
 def update_video_job_from_provider(job_id: str, remote: dict[str, Any]) -> None:
-    """Update an AiJob (video_shot) from remote provider data."""
-    from ..points.db import change_points
+    """Update an AiJob (video_shot) from remote provider data.
 
+    Maps provider statuses to AiJob statuses:
+    - pending/running/generning → running
+    - completed → succeeded
+    - failed → failed
+    """
     updated = {k: v for k, v in remote.items() if v is not None}
     ts = datetime.now()
     with SessionLocal() as db:
         job = db.get(AiJob, job_id)
         if not job:
             return
-        for key in ("progress", "status", "error"):
-            if key in updated:
-                setattr(job, key, updated[key])
+
+        # Update progress
+        if "progress" in updated:
+            job.progress = updated["progress"]
+
+        # Update output URLs
         output = dict(job.output_json or {})
         if "preview_url" in updated:
             output["preview_url"] = updated["preview_url"]
         if "video_url" in updated:
             output["video_url"] = updated["video_url"]
         job.output_json = output
-        job.updated_at = ts
-        if updated.get("status") in {"completed", "failed"}:
-            shot = db.get(Shot, job.shot_id)
-            if shot:
-                shot.status = updated["status"]
-                shot.updated_at = ts
+
+        # Map provider status to AiJob status
+        provider_status = updated.get("status")
+        if provider_status:
+            new_job_status = _PROVIDER_STATUS_MAP.get(provider_status, job.status)
             previous_status = job.status
-            if updated["status"] == "completed":
-                job.status = "succeeded"
+            job.status = new_job_status
+            job.updated_at = ts
+
+            # Terminal states
+            if new_job_status in {"succeeded", "failed"}:
                 job.completed_at = ts
-            else:
-                job.status = "failed"
-                job.completed_at = ts
-                cost = int(job.cost_points or 0)
-                if previous_status not in {"failed", "cancelled"} and cost > 0:
-                    user = db.execute(select(User).where(User.id == job.user_id).with_for_update()).scalar_one_or_none()
-                    if user:
-                        user.points = int(user.points or 0) + cost
-                        db.add(
-                            PointLedger(
-                                id=uid("ledger"),
-                                user_id=job.user_id,
-                                amount=cost,
-                                type="refund",
-                                scene="生成失败退回",
-                                description="镜头视频生成失败退回积分",
-                                balance_after=user.points,
-                                ai_job_id=job.id,
-                                created_at=ts,
+                shot = db.get(Shot, job.shot_id)
+                if shot:
+                    # Shot uses provider-facing statuses: completed/failed
+                    shot.status = "completed" if new_job_status == "succeeded" else "failed"
+                    shot.updated_at = ts
+                if new_job_status == "failed":
+                    job.error = updated.get("error")
+                    # Refund on failure
+                    cost = int(job.cost_points or 0)
+                    if previous_status not in {"failed", "cancelled"} and cost > 0:
+                        user = db.execute(select(User).where(User.id == job.user_id).with_for_update()).scalar_one_or_none()
+                        if user:
+                            user.points = int(user.points or 0) + cost
+                            db.add(
+                                PointLedger(
+                                    id=uid("ledger"),
+                                    user_id=job.user_id,
+                                    amount=cost,
+                                    type="refund",
+                                    scene="生成失败退回",
+                                    description="镜头视频生成失败退回积分",
+                                    balance_after=user.points,
+                                    ai_job_id=job.id,
+                                    created_at=ts,
+                                )
                             )
-                        )
+        else:
+            job.updated_at = ts
+
         db.commit()
 
 

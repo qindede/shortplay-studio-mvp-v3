@@ -63,11 +63,10 @@ def generate_video_for_shot(user: dict, shot_id: str) -> dict:
             _reference_image(assets, shot),
             shot["duration"],
         )
-        result = db.create_video_job(user, shot_id, provider_task_id, POINT_RULES["video_second"], now())
+        # _run_paid_generation 已创建 AiJob 并扣费，这里只更新 provider_task_id 和 shot 状态
+        result = db.update_job_for_video_shot(job["id"], shot_id, provider_task_id, now())
         if not result:
             raise NotFoundError("镜头不存在")
-        if "error" in result:
-            raise BadRequestError(result["error"])
         return result, {}
 
     return _run_paid_generation(

@@ -75,7 +75,12 @@ class ComposeVideoFileTests(unittest.TestCase):
 
 
 class ListVideoJobsWithPollTests(unittest.TestCase):
-    def test_episode_not_found_raises(self):
+    @patch("app.features.video.service.SessionLocal")
+    def test_episode_not_found_raises(self, mock_session_cls):
+        mock_session = MagicMock()
+        mock_session.scalar.return_value = None
+        mock_session_cls.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_session_cls.return_value.__exit__ = MagicMock(return_value=False)
         with self.assertRaises(NotFoundError):
             video_service.list_video_jobs_with_poll({"id": "user_1"}, "ep_missing")
 
