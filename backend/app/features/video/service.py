@@ -6,9 +6,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
+
 from ...ai import video as ai_video
 from ...ai.errors import AIError
 from ...config import BACKEND_PUBLIC_URL, FFMPEG_PATH, POINT_RULES
+from ...db import SessionLocal
+from ...models import AiJob, Episode, Project, Shot
+from ...serializers import _video_job_dict
 from ... import storage
 from ..ai_job.service import run_paid_generation as _run_paid_generation
 from ..errors import BadRequestError, NotFoundError, ServiceUnavailableError
@@ -58,8 +63,12 @@ def generate_video_for_shot(user: dict, shot_id: str) -> dict:
             _reference_image(assets, shot),
             shot["duration"],
         )
-        task = db.attach_video_task_to_job(user, shot_id, provider_task_id, job["id"], now())
-        return task, {}
+        result = db.create_video_job(user, shot_id, provider_task_id, POINT_RULES["video_second"], now())
+        if not result:
+            raise NotFoundError("镜头不存在")
+        if "error" in result:
+            raise BadRequestError(result["error"])
+        return result, {}
 
     return _run_paid_generation(
         user,
@@ -98,7 +107,7 @@ def compose_episode(user: dict, episode_id: str, payload: Any, compose_video_fil
 
     def work(job: dict) -> tuple[dict, dict | None]:
         shot_order = {shot["id"]: shot["no"] for shot in shots}
-        video_url = compose_video_file(sorted(context.get("video_tasks", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
+        video_url = compose_video_file(sorted(context.get("video_jobs", []), key=lambda item: shot_order.get(item.get("shot_id"), 0)))
         version = db.save_composed_version(user, episode_id, payload, video_url, 0, now(), charge=False, job_id=job["id"])
         return version, None
 
@@ -147,18 +156,41 @@ def compose_video_file(tasks: list[dict]) -> str:
         return storage.put_bytes(output.read_bytes(), key, "video/mp4")
 
 
-def list_video_tasks_with_poll(user: dict, episode_id: str) -> list[dict]:
-    """Poll video task status from provider and return updated tasks."""
-    from ...features.workspace.service import episode_workspace
-    payload = episode_workspace(user, episode_id)
-    tasks = payload["video_tasks"]
-    for task in tasks:
-        if task.get("status") != "generating" or not task.get("provider_task_id"):
-            continue
-        from ...ai.video import query_video_task
-        try:
-            remote = query_video_task(task["provider_task_id"])
-        except AIError:
-            continue
-        db.update_video_task_from_provider(task, remote)
-    return sorted(tasks, key=lambda t: t.get("updated_at", ""), reverse=True)
+def list_video_jobs_with_poll(user: dict, episode_id: str) -> list[dict]:
+    """Poll video job status from provider and return updated jobs."""
+    with SessionLocal() as session:
+        # Verify user owns this episode
+        episode = session.scalar(
+            select(Episode)
+            .join(Project, Project.id == Episode.project_id)
+            .where(Episode.id == episode_id, Project.owner_user_id == user["id"])
+        )
+        if not episode:
+            raise NotFoundError("剧集不存在")
+
+        jobs = list(session.scalars(
+            select(AiJob)
+            .where(AiJob.episode_id == episode_id, AiJob.type == "video_shot")
+            .order_by(AiJob.updated_at.desc())
+        ))
+        shot_ids = {j.shot_id for j in jobs if j.shot_id}
+        shots = {s.id: s for s in session.scalars(select(Shot).where(Shot.id.in_(shot_ids)))} if shot_ids else {}
+
+    result = []
+    for job in jobs:
+        if job.status == "running" and job.provider_task_id:
+            from ...ai.video import query_video_task
+            try:
+                remote = query_video_task(job.provider_task_id)
+                db.update_video_job_from_provider(job.id, remote)
+                # Re-fetch updated job
+                with SessionLocal() as session:
+                    job = session.get(AiJob, job.id)
+                    if not job:
+                        continue
+            except AIError:
+                pass
+        shot = shots.get(job.shot_id)
+        result.append(_video_job_dict(job, shot))
+
+    return sorted(result, key=lambda t: t.get("updated_at", ""), reverse=True)

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { Episode, Shot, VideoTask, VideoVersion } from '$lib/api';
+  import type { Episode, Shot, VideoJob, VideoVersion } from '$lib/api';
   import { getStatusClass, getStatusLabel } from '$lib/workspace/ui';
 
   export let selectedEpisode: Episode | null = null;
   export let shots: Shot[] = [];
-  export let videoTasks: VideoTask[] = [];
+  export let videoJobs: VideoJob[] = [];
   export let versions: VideoVersion[] = [];
   export let composeVideo: () => void | Promise<void>;
   export let regenerateVideo: (shotId: string) => void | Promise<void>;
@@ -31,19 +31,19 @@
 
   $: completedShots = shots.filter((shot) => shot.status === 'completed').length;
 
-  function getVideoUrl(item: VideoTask | VideoVersion) {
+  function getVideoUrl(item: VideoJob | VideoVersion) {
     return item.preview_url || item.video_url || '';
   }
 
-  function canPreviewTask(task: VideoTask) {
+  function canPreviewTask(task: VideoJob) {
     return task.status === 'completed' || task.progress >= 100;
   }
 
-  function findShot(task: VideoTask) {
+  function findShot(task: VideoJob) {
     return shots.find((shot) => shot.id === task.shot_id);
   }
 
-  function openTaskPreview(task: VideoTask) {
+  function openTaskPreview(task: VideoJob) {
     if (!canPreviewTask(task)) return;
 
     const shot = findShot(task);
@@ -95,7 +95,7 @@
         <table class="table">
           <thead><tr><th>任务</th><th>分镜号</th><th>时长</th><th>进度</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
           <tbody>
-            {#each videoTasks as task}
+            {#each videoJobs as task}
               {@const shot = findShot(task)}
               <tr>
                 <td><div class="main-text">{task.title}</div><div class="sub-text">{shot?.visual || '角色参考 + 场景参考'}</div></td>

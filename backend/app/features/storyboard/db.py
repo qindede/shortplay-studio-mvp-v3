@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import delete, select
 
 from ...db import SessionLocal, require_db
-from ...models import Asset, AssetReference, Episode, Project, Shot, VideoTask
+from ...models import AiJob, Asset, AssetReference, Episode, Project, Shot
 from ...serializers import _asset_dict, _episode_dict, _project_dict, _shot_dict
 from ...utils import parse_dt, uid
 from ..ai_job.db import add_ai_job
@@ -54,7 +54,7 @@ def save_storyboard(
     charge: bool = True,
 ) -> list[dict[str, Any]] | dict[str, str] | None:
     """Heavy transactional function: deduplicate/insert generated assets, optionally charge
-    points + AI jobs, delete old VideoTask/Shot rows, insert new shots, set episode status."""
+    points + AI jobs, delete old Shot rows and cancel video jobs, insert new shots, set episode status."""
     ts = parse_dt(timestamp)
     with SessionLocal() as db:
         episode = db.scalar(
@@ -105,7 +105,10 @@ def save_storyboard(
             db.rollback()
             return {"error": str(exc)}
 
-        db.execute(delete(VideoTask).where(VideoTask.episode_id == episode_id))
+        # Cancel running video jobs for this episode
+        for job in db.scalars(select(AiJob).where(AiJob.episode_id == episode_id, AiJob.type == "video_shot", AiJob.status == "running")):
+            job.status = "cancelled"
+            job.updated_at = ts
         db.execute(delete(Shot).where(Shot.episode_id == episode_id))
         new_shots = []
         for index, item in enumerate(ai_shots, start=1):

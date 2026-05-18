@@ -116,13 +116,13 @@ export interface WorkspaceBootstrap {
   selected_episode: Episode | null;
   shots: Shot[];
   assets: Asset[];
-  video_tasks: VideoTask[];
+  video_jobs: VideoJob[];
   versions: VideoVersion[];
 }
 
 export interface EpisodeWorkspace {
   shots: Shot[];
-  video_tasks: VideoTask[];
+  video_jobs: VideoJob[];
   versions: VideoVersion[];
 }
 
@@ -147,6 +147,7 @@ export interface Project {
   owner_user_id: string;
   cover: string;
   cover_image?: string;
+  created_at: string;
   updated_at: string;
   episode_count: number;
   asset_count: number;
@@ -235,7 +236,7 @@ export interface StoryboardPrepareResponse {
   missing_assets: StoryboardAssetCandidate[];
 }
 
-export interface VideoTask {
+export interface VideoJob {
   id: string;
   episode_id: string;
   shot_id: string;
@@ -324,9 +325,9 @@ export const api = {
     request<StoryboardPrepareResponse>(`/api/episodes/${episodeId}/prepare-storyboard`, { method: 'POST' }),
   generateStoryboard: (episodeId: string, body: { confirmed_assets?: StoryboardAssetCandidate[] } = {}) =>
     request<Shot[]>(`/api/episodes/${episodeId}/generate-storyboard`, { method: 'POST', body: JSON.stringify(body) }),
-  generateShotVideo: (shotId: string) => request<VideoTask>(`/api/shots/${shotId}/generate-video`, { method: 'POST' }),
-  generateVideos: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
-  videoTasks: (episodeId: string) => request<VideoTask[]>(`/api/episodes/${episodeId}/video-tasks`),
+  generateShotVideo: (shotId: string) => request<VideoJob>(`/api/shots/${shotId}/generate-video`, { method: 'POST' }),
+  generateVideos: (episodeId: string) => request<VideoJob[]>(`/api/episodes/${episodeId}/generate-videos`, { method: 'POST' }),
+  videoJobs: (episodeId: string) => request<VideoJob[]>(`/api/episodes/${episodeId}/video-jobs`),
   assets: (projectId: string, type?: string) => request<Asset[]>(`/api/projects/${projectId}/assets${type ? `?type=${type}` : ''}`),
   createAsset: (projectId: string, body: { type: string; name: string; description: string; initial: string; image?: string; voice?: string; voice_url?: string; references?: { type: string; name: string; url?: string; note?: string }[] }) =>
     request<Asset>(`/api/projects/${projectId}/assets`, { method: 'POST', body: JSON.stringify(body) }),

@@ -18,7 +18,6 @@ from .models import (
     Project,
     Shot,
     User,
-    VideoTask,
     VideoVersion,
 )
 from .utils import fmt_dt, parse_dt, uid
@@ -65,6 +64,7 @@ def load_data() -> dict[str, Any]:
                 "status": row.status,
                 "cover": row.cover,
                 "cover_image": row.cover_image_url,
+                "created_at": fmt_dt(row.created_at),
                 "updated_at": fmt_dt(row.updated_at),
             }
             for row in db.scalars(select(Project))
@@ -129,25 +129,6 @@ def load_data() -> dict[str, Any]:
                 "updated_at": fmt_dt(row.updated_at),
             }
             for row in db.scalars(select(Asset))
-        ]
-        video_tasks = [
-            {
-                "id": row.id,
-                "episode_id": row.episode_id,
-                "shot_id": row.shot_id,
-                "ai_job_id": row.ai_job_id,
-                "title": row.title,
-                "duration": row.duration,
-                "progress": row.progress,
-                "status": row.status,
-                "provider": row.provider,
-                "provider_task_id": row.provider_task_id,
-                "preview_url": row.preview_url,
-                "video_url": row.video_url,
-                "error": row.error,
-                "updated_at": fmt_dt(row.updated_at),
-            }
-            for row in db.scalars(select(VideoTask))
         ]
         video_versions = [
             {
@@ -235,7 +216,6 @@ def load_data() -> dict[str, Any]:
             "episodes": episodes,
             "shots": shots,
             "assets": assets,
-            "video_tasks": video_tasks,
             "video_versions": video_versions,
             "usage": usage,
             "users": user_rows,
@@ -246,7 +226,7 @@ def load_data() -> dict[str, Any]:
 
 def save_data(data: dict[str, Any]) -> None:
     with SessionLocal() as db:
-        for model in [PointLedger, VideoVersion, VideoTask, AiJob, AssetReference, Asset, Shot, Episode, Project]:
+        for model in [PointLedger, VideoVersion, AiJob, AssetReference, Asset, Shot, Episode, Project]:
             db.execute(delete(model))
         db.flush()
 
@@ -278,6 +258,7 @@ def save_data(data: dict[str, Any]) -> None:
                     status=item.get("status", "draft"),
                     cover=item.get("cover"),
                     cover_image_url=item.get("cover_image") or item.get("cover_image_url"),
+                    created_at=parse_dt(item.get("created_at")),
                     updated_at=parse_dt(item.get("updated_at")),
                 )
             )
@@ -370,25 +351,6 @@ def save_data(data: dict[str, Any]) -> None:
                 )
             )
         db.flush()
-        for item in data.get("video_tasks", []):
-            db.add(
-                VideoTask(
-                    id=item["id"],
-                    episode_id=item["episode_id"],
-                    shot_id=item["shot_id"],
-                    ai_job_id=item.get("ai_job_id"),
-                    title=item["title"],
-                    duration=int(item.get("duration", 1)),
-                    progress=int(item.get("progress", 0)),
-                    status=item.get("status", "pending"),
-                    provider=item.get("provider"),
-                    provider_task_id=item.get("provider_task_id"),
-                    preview_url=item.get("preview_url"),
-                    video_url=item.get("video_url"),
-                    error=item.get("error"),
-                    updated_at=parse_dt(item.get("updated_at")),
-                )
-            )
         for item in data.get("video_versions", []):
             db.add(
                 VideoVersion(

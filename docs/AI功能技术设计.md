@@ -344,27 +344,10 @@ failed
 cancelled
 ```
 
-### 5.8 video_tasks
+### 5.8 video_tasks (已合并到 ai_jobs)
 
-```text
-id uuid primary key
-episode_id uuid references episodes(id) on delete cascade
-shot_id uuid references shots(id) on delete cascade
-ai_job_id uuid references ai_jobs(id)
-
-title varchar not null
-duration integer not null
-progress integer not null default 0
-status varchar not null
-provider varchar
-provider_task_id varchar
-preview_url text
-video_url text
-error text
-
-created_at timestamptz not null
-updated_at timestamptz not null
-```
+> 此表已在 2026-05-18 合并到 `ai_jobs` 表。`type='video_shot'` 的 AiJob 即为视频任务。
+> `title`/`duration` 来源于 `shots` 表（join `shot_id`），`preview_url`/`video_url` 存储在 `output_json` 中。
 
 ### 5.9 video_versions
 

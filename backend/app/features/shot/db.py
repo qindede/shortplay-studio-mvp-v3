@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select, text
 
 from ...db import SessionLocal, require_db
-from ...models import Asset, AssetReference, Episode, Project, Shot, VideoTask
+from ...models import Asset, AssetReference, Episode, Project, Shot
 from ...serializers import _asset_dict, _episode_dict, _project_dict, _shot_dict
 from ...utils import parse_dt
 
@@ -174,14 +174,6 @@ def patch_shot(user: dict[str, Any], shot_id: str, payload: Any, timestamp: str)
             if field in updates:
                 setattr(shot, field, updates[field])
         shot.updated_at = ts
-        # 跨 feature：同步更新 video_task（事务性例外，保持原子性）
-        task = db.scalar(select(VideoTask).where(VideoTask.shot_id == shot_id))
-        if task:
-            if "title" in updates:
-                task.title = shot.title
-            if "duration" in updates:
-                task.duration = shot.duration
-            task.updated_at = ts
         episode = db.get(Episode, shot.episode_id)
         if episode:
             episode.updated_at = ts

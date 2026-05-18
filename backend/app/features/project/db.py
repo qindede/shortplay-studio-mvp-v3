@@ -28,6 +28,7 @@ def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
                     p.status,
                     p.cover,
                     p.cover_image_url AS cover_image,
+                    p.created_at,
                     p.updated_at,
                     (SELECT count(*) FROM episodes e WHERE e.project_id = p.id) AS episode_count,
                     (SELECT count(*) FROM assets a WHERE a.project_id = p.id) AS asset_count,
@@ -51,6 +52,7 @@ def list_projects(user: dict[str, Any]) -> list[dict[str, Any]]:
                 "status_label": STATUS_LABEL.get(row["status"], row["status"]),
                 "cover": row["cover"],
                 "cover_image": row["cover_image"],
+                "created_at": fmt_dt(row["created_at"]),
                 "updated_at": fmt_dt(row["updated_at"]),
                 "episode_count": int(row["episode_count"] or 0),
                 "asset_count": int(row["asset_count"] or 0),
@@ -85,6 +87,7 @@ def create_project(user: dict[str, Any], payload: Any, timestamp: str) -> dict[s
         description=payload.description,
         status="draft",
         cover="dark",
+        created_at=ts,
         updated_at=ts,
     )
     with SessionLocal() as db:

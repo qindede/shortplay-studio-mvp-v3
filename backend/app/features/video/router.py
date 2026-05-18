@@ -10,10 +10,10 @@ from . import db, service
 router = APIRouter(prefix="/api", tags=["video"])
 
 
-@router.get("/episodes/{episode_id}/video-tasks")
+@router.get("/episodes/{episode_id}/video-jobs")
 
-def list_video_tasks(episode_id: str, user: dict = Depends(get_current_user)):
-    return service.list_video_tasks_with_poll(user, episode_id)
+def list_video_jobs(episode_id: str, user: dict = Depends(get_current_user)):
+    return service.list_video_jobs_with_poll(user, episode_id)
 
 
 @router.post("/shots/{shot_id}/generate-video")

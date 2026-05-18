@@ -36,6 +36,7 @@ class Project(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     cover: Mapped[str | None] = mapped_column(String(32))
     cover_image_url: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -123,25 +124,6 @@ class AiJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class VideoTask(Base):
-    __tablename__ = "video_tasks"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    episode_id: Mapped[str] = mapped_column(String, ForeignKey("episodes.id", ondelete="CASCADE"), nullable=False, index=True)
-    shot_id: Mapped[str] = mapped_column(String, ForeignKey("shots.id", ondelete="CASCADE"), nullable=False, index=True)
-    ai_job_id: Mapped[str | None] = mapped_column(String, ForeignKey("ai_jobs.id"), index=True)
-    title: Mapped[str] = mapped_column(String(160), nullable=False)
-    duration: Mapped[int] = mapped_column(Integer, nullable=False)
-    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-    provider: Mapped[str | None] = mapped_column(String(64))
-    provider_task_id: Mapped[str | None] = mapped_column(String(160))
-    preview_url: Mapped[str | None] = mapped_column(Text)
-    video_url: Mapped[str | None] = mapped_column(Text)
-    error: Mapped[str | None] = mapped_column(Text)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class VideoVersion(Base):

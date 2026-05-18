@@ -12,7 +12,6 @@ from .models import (
     Project,
     Shot,
     User,
-    VideoTask,
     VideoVersion,
 )
 from .utils import fmt_dt
@@ -64,6 +63,7 @@ def _project_dict(row: Project, episode_count: int = 0, asset_count: int = 0, ve
         "status_label": STATUS_LABEL.get(row.status, row.status),
         "cover": row.cover,
         "cover_image": row.cover_image_url,
+        "created_at": fmt_dt(row.created_at),
         "updated_at": fmt_dt(row.updated_at),
         "episode_count": episode_count,
         "asset_count": asset_count,
@@ -124,22 +124,22 @@ def _asset_dict(row: Asset, refs: list[dict] | None = None) -> dict[str, Any]:
     }
 
 
-def _video_task_dict(row: VideoTask) -> dict[str, Any]:
+def _video_job_dict(job: AiJob, shot: Shot | None = None) -> dict[str, Any]:
+    output = job.output_json or {}
     return {
-        "id": row.id,
-        "episode_id": row.episode_id,
-        "shot_id": row.shot_id,
-        "ai_job_id": row.ai_job_id,
-        "title": row.title,
-        "duration": row.duration,
-        "progress": row.progress,
-        "status": row.status,
-        "provider": row.provider,
-        "provider_task_id": row.provider_task_id,
-        "preview_url": row.preview_url,
-        "video_url": row.video_url,
-        "error": row.error,
-        "updated_at": fmt_dt(row.updated_at),
+        "id": job.id,
+        "episode_id": job.episode_id,
+        "shot_id": job.shot_id,
+        "title": shot.title if shot else "",
+        "duration": shot.duration if shot else 0,
+        "progress": job.progress,
+        "status": job.status,
+        "provider": job.provider,
+        "provider_task_id": job.provider_task_id,
+        "preview_url": output.get("preview_url"),
+        "video_url": output.get("video_url"),
+        "error": job.error,
+        "updated_at": fmt_dt(job.updated_at),
     }
 
 

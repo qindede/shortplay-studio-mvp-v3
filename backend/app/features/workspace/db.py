@@ -57,6 +57,7 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
                                 'status', p.status,
                                 'cover', p.cover,
                                 'cover_image', p.cover_image_url,
+                                'created_at', p.created_at,
                                 'updated_at', p.updated_at,
                                 'episode_count', (SELECT count(*) FROM episodes e WHERE e.project_id = p.id),
                                 'asset_count', (SELECT count(*) FROM assets a WHERE a.project_id = p.id),
@@ -148,26 +149,27 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
                     COALESCE((
                         SELECT jsonb_agg(
                             jsonb_build_object(
-                                'id', t.id,
-                                'episode_id', t.episode_id,
-                                'shot_id', t.shot_id,
-                                'ai_job_id', t.ai_job_id,
-                                'title', t.title,
-                                'duration', t.duration,
-                                'progress', t.progress,
-                                'status', t.status,
-                                'provider', t.provider,
-                                'provider_task_id', t.provider_task_id,
-                                'preview_url', t.preview_url,
-                                'video_url', t.video_url,
-                                'error', t.error,
-                                'updated_at', t.updated_at
+                                'id', j.id,
+                                'episode_id', j.episode_id,
+                                'shot_id', j.shot_id,
+                                'title', s.title,
+                                'duration', s.duration,
+                                'progress', j.progress,
+                                'status', j.status,
+                                'provider', j.provider,
+                                'provider_task_id', j.provider_task_id,
+                                'preview_url', j.output_json->>'preview_url',
+                                'video_url', j.output_json->>'video_url',
+                                'error', j.error,
+                                'updated_at', j.updated_at
                             )
-                            ORDER BY t.updated_at DESC
+                            ORDER BY j.updated_at DESC
                         )
-                        FROM video_tasks t
-                        JOIN first_episode fe ON fe.id = t.episode_id
-                    ), '[]'::jsonb) AS video_tasks,
+                        FROM ai_jobs j
+                        JOIN shots s ON s.id = j.shot_id
+                        JOIN first_episode fe ON fe.id = j.episode_id
+                        WHERE j.type = 'video_shot'
+                    ), '[]'::jsonb) AS video_jobs,
                     COALESCE((
                         SELECT jsonb_agg(
                             jsonb_build_object(
@@ -235,7 +237,7 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
         project_episodes = list(row["episodes"] or [])
         project_assets = list(row["assets"] or [])
         episode_shots = list(row["shots"] or [])
-        episode_tasks = list(row["video_tasks"] or [])
+        episode_jobs = list(row["video_jobs"] or [])
         project_versions = list(row["versions"] or [])
         ledger = list(row["ledger"] or [])
 
@@ -263,7 +265,7 @@ def workspace_bootstrap(user: dict[str, Any]) -> dict[str, Any]:
             "selected_episode": selected_episode,
             "shots": episode_shots,
             "assets": project_assets,
-            "video_tasks": episode_tasks,
+            "video_jobs": episode_jobs,
             "versions": project_versions,
         }
 
@@ -308,26 +310,27 @@ def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] |
                     COALESCE((
                         SELECT jsonb_agg(
                             jsonb_build_object(
-                                'id', t.id,
-                                'episode_id', t.episode_id,
-                                'shot_id', t.shot_id,
-                                'ai_job_id', t.ai_job_id,
-                                'title', t.title,
-                                'duration', t.duration,
-                                'progress', t.progress,
-                                'status', t.status,
-                                'provider', t.provider,
-                                'provider_task_id', t.provider_task_id,
-                                'preview_url', t.preview_url,
-                                'video_url', t.video_url,
-                                'error', t.error,
-                                'updated_at', t.updated_at
+                                'id', j.id,
+                                'episode_id', j.episode_id,
+                                'shot_id', j.shot_id,
+                                'title', s.title,
+                                'duration', s.duration,
+                                'progress', j.progress,
+                                'status', j.status,
+                                'provider', j.provider,
+                                'provider_task_id', j.provider_task_id,
+                                'preview_url', j.output_json->>'preview_url',
+                                'video_url', j.output_json->>'video_url',
+                                'error', j.error,
+                                'updated_at', j.updated_at
                             )
-                            ORDER BY t.updated_at DESC
+                            ORDER BY j.updated_at DESC
                         )
-                        FROM video_tasks t
-                        JOIN target_episode e ON e.id = t.episode_id
-                    ), '[]'::jsonb) AS video_tasks,
+                        FROM ai_jobs j
+                        JOIN shots s ON s.id = j.shot_id
+                        JOIN target_episode e ON e.id = j.episode_id
+                        WHERE j.type = 'video_shot'
+                    ), '[]'::jsonb) AS video_jobs,
                     COALESCE((
                         SELECT jsonb_agg(
                             jsonb_build_object(
@@ -358,7 +361,7 @@ def episode_workspace(user: dict[str, Any], episode_id: str) -> dict[str, Any] |
             return None
         return {
             "shots": list(row["shots"] or []),
-            "video_tasks": list(row["video_tasks"] or []),
+            "video_jobs": list(row["video_jobs"] or []),
             "versions": list(row["versions"] or []),
         }
 

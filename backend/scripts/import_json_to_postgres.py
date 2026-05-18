@@ -14,7 +14,6 @@ from app.models import (
     Project,
     Shot,
     User,
-    VideoTask,
     VideoVersion,
 )
 from app.utils import parse_dt
@@ -50,6 +49,7 @@ def main() -> None:
                 status=item.get("status", "draft"),
                 cover=item.get("cover"),
                 cover_image_url=item.get("cover_image") or item.get("cover_image_url"),
+                created_at=parse_dt(item.get("created_at")),
             ))
         for item in data.get("episodes", []):
             db.merge(Episode(
@@ -100,21 +100,6 @@ def main() -> None:
                     note=ref.get("note"),
                     sort_order=index,
                 ))
-        for item in data.get("video_tasks", []):
-            db.merge(VideoTask(
-                id=item["id"],
-                episode_id=item["episode_id"],
-                shot_id=item["shot_id"],
-                title=item["title"],
-                duration=int(item.get("duration", 1)),
-                progress=int(item.get("progress", 0)),
-                status=item.get("status", "pending"),
-                provider=item.get("provider"),
-                provider_task_id=item.get("provider_task_id"),
-                preview_url=item.get("preview_url"),
-                video_url=item.get("video_url"),
-                error=item.get("error"),
-            ))
         for item in data.get("video_versions", []):
             db.merge(VideoVersion(
                 id=item["id"],

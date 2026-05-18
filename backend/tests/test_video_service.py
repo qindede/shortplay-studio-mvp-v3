@@ -38,7 +38,7 @@ class ComposeEpisodeTests(unittest.TestCase):
 
     @patch("app.features.video.db.compose_context")
     def test_no_shots_raises(self, mock_ctx):
-        mock_ctx.return_value = {"episode": {}, "project": {}, "shots": [], "video_tasks": []}
+        mock_ctx.return_value = {"episode": {}, "project": {}, "shots": [], "video_jobs": []}
         with self.assertRaises(BadRequestError):
             video_service.compose_episode({"id": "user_1"}, "ep_1", MagicMock(), lambda _: "url")
 
@@ -48,7 +48,7 @@ class ComposeEpisodeTests(unittest.TestCase):
             "episode": {"title": "test"},
             "project": {"id": "proj_1"},
             "shots": [{"id": "s1", "no": 1, "status": "generating"}],
-            "video_tasks": [],
+            "video_jobs": [],
         }
         with self.assertRaises(BadRequestError):
             video_service.compose_episode({"id": "user_1"}, "ep_1", MagicMock(), lambda _: "url")
@@ -74,12 +74,10 @@ class ComposeVideoFileTests(unittest.TestCase):
             video_service.compose_video_file(tasks)
 
 
-class ListVideoTasksWithPollTests(unittest.TestCase):
-    @patch("app.features.workspace.db.episode_workspace")
-    def test_episode_not_found_raises(self, mock_ws):
-        mock_ws.return_value = None
+class ListVideoJobsWithPollTests(unittest.TestCase):
+    def test_episode_not_found_raises(self):
         with self.assertRaises(NotFoundError):
-            video_service.list_video_tasks_with_poll({"id": "user_1"}, "ep_missing")
+            video_service.list_video_jobs_with_poll({"id": "user_1"}, "ep_missing")
 
 
 if __name__ == "__main__":

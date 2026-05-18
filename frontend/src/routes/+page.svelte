@@ -18,7 +18,7 @@
     type StoryboardAssetCandidate,
     type Usage,
     type User,
-    type VideoTask,
+    type VideoJob,
     type VideoVersion
   } from '$lib/api';
   import AuthScreen from '$lib/components/workspace/AuthScreen.svelte';
@@ -73,7 +73,7 @@
   let selectedEpisode: Episode | null = null;
   let shots: Shot[] = [];
   let assets: Asset[] = [];
-  let videoTasks: VideoTask[] = [];
+  let videoJobs: VideoJob[] = [];
   let versions: VideoVersion[] = [];
   let assetType: AssetFilter = 'all';
   let projectPickerOpen = false;
@@ -189,7 +189,7 @@
     selectedEpisode = null;
     shots = [];
     assets = [];
-    videoTasks = [];
+    videoJobs = [];
     versions = [];
     pointLedger = { items: [], total: 0 };
     assetType = 'all';
@@ -374,7 +374,7 @@
       selectedEpisode = null;
       shots = [];
       assets = [];
-      videoTasks = [];
+      videoJobs = [];
       versions = [];
       resetEpisodeForm();
       return;
@@ -385,7 +385,7 @@
     assets = bootstrap.assets;
     selectedEpisode = bootstrap.selected_episode;
     shots = bootstrap.shots;
-    videoTasks = bootstrap.video_tasks;
+    videoJobs = bootstrap.video_jobs;
     versions = bootstrap.versions;
     if (selectedEpisode) {
       fillEpisodeForm(selectedEpisode);
@@ -419,7 +419,7 @@
     if (episodes.length === 0) {
       selectedEpisode = null;
       shots = [];
-      videoTasks = [];
+      videoJobs = [];
       versions = await api.versions(project.id);
       resetEpisodeForm();
     } else {
@@ -435,7 +435,7 @@
     if (goScript) activePage = 'script';
     const workspace = await api.episodeWorkspace(episode.id);
     shots = workspace.shots;
-    videoTasks = workspace.video_tasks;
+    videoJobs = workspace.video_jobs;
     versions = workspace.versions;
   }
 
@@ -457,7 +457,7 @@
     if (!freshEpisode) {
       selectedEpisode = null;
       shots = [];
-      videoTasks = [];
+      videoJobs = [];
       versions = await api.versions(currentProject.id);
       resetEpisodeForm();
       return;
@@ -588,7 +588,7 @@
         selectedEpisode = null;
         shots = [];
         assets = [];
-        videoTasks = [];
+        videoJobs = [];
         versions = [];
         resetEpisodeForm();
         activePage = 'projects';
@@ -671,7 +671,7 @@
       if (episodes.length === 0) {
         selectedEpisode = null;
         shots = [];
-        videoTasks = [];
+        videoJobs = [];
         versions = await api.versions(project.id);
         resetEpisodeForm();
         activePage = 'episodes';
@@ -744,7 +744,7 @@
   async function runEpisodeVideoGeneration(episode: Episode) {
     selectedEpisode = episode;
     fillEpisodeForm(episode);
-    videoTasks = await api.generateVideos(episode.id);
+    videoJobs = await api.generateVideos(episode.id);
     shots = await api.shots(episode.id);
     await refreshDashboard();
     await reloadCurrentProject();
@@ -757,7 +757,7 @@
 
     await safeRun(async () => {
       await api.generateShotVideo(shotId);
-      videoTasks = await api.videoTasks(episode.id);
+      videoJobs = await api.videoJobs(episode.id);
       shots = await api.shots(episode.id);
       await refreshDashboard();
     });
@@ -776,7 +776,7 @@
     await safeRun(async () => {
       await api.generateShotVideo(shot.id);
       shots = await api.shots(episode.id);
-      videoTasks = await api.videoTasks(episode.id);
+      videoJobs = await api.videoJobs(episode.id);
 
       if (currentProject) {
         episodes = await api.episodes(currentProject.id);
@@ -981,7 +981,7 @@
           {/if}
 
           {#if activePage === 'video'}
-            <VideoPage {selectedEpisode} {shots} {videoTasks} {versions} {composeVideo} {regenerateVideo} on:deleteVersion={(e) => deleteVersion(e.detail)} />
+            <VideoPage {selectedEpisode} {shots} {videoJobs} {versions} {composeVideo} {regenerateVideo} on:deleteVersion={(e) => deleteVersion(e.detail)} />
           {/if}
 
           {#if activePage === 'account'}
