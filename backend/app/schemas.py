@@ -3,6 +3,14 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class ReferenceItem(BaseModel):
+    id: str | None = None
+    type: str = Field(default="image", pattern="^(image|audio)$")
+    name: str = Field(default="参考", min_length=1)
+    url: str | None = None
+    note: str | None = None
+
+
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=6, max_length=64)
@@ -77,7 +85,7 @@ class AssetCreate(BaseModel):
     image: str | None = None
     voice: str | None = None
     voice_url: str | None = None
-    references: list[dict] | None = None
+    references: list[ReferenceItem] | None = None
 
 
 class AssetUpdate(BaseModel):
@@ -89,7 +97,7 @@ class AssetUpdate(BaseModel):
     voice_url: str | None = None
     voice_status: str | None = None
     speaker_id: str | None = None
-    references: list[dict] | None = None
+    references: list[ReferenceItem] | None = None
 
 
 class AssetGenerate(BaseModel):

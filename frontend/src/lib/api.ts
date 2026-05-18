@@ -217,7 +217,7 @@ export interface Asset {
 
 export interface AssetReference {
   id: string;
-  type: 'image' | 'audio' | 'video' | 'text';
+  type: 'image' | 'audio';
   name: string;
   url?: string;
   note?: string;

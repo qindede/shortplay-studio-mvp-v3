@@ -81,10 +81,12 @@ def comparable_asset_names(asset: dict) -> set[str]:
     return {item for item in names if item}
 
 
-def normalize_refs(refs: list[dict] | None) -> list[dict]:
-    """Normalize reference dicts to ensure consistent id/type/name/url/note fields."""
+def normalize_refs(refs: list | None) -> list[dict]:
+    """Normalize reference dicts/models to ensure consistent id/type/name/url/note fields."""
     normalized = []
     for index, ref in enumerate(refs or [], start=1):
+        if hasattr(ref, "model_dump"):
+            ref = ref.model_dump()
         normalized.append({
             "id": ref.get("id") or uid("ref"),
             "type": ref.get("type", "image"),
