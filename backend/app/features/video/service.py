@@ -103,6 +103,10 @@ def compose_episode(user: dict, episode_id: str, payload: Any, compose_video_fil
     shots = context.get("shots", [])
     if not shots or any(shot.get("status") != "completed" for shot in shots):
         raise BadRequestError("所有镜头完成后才能合成本集视频")
+    video_jobs = context.get("video_jobs", [])
+    shots_with_video = {j.get("shot_id") for j in video_jobs}
+    if any(shot["id"] not in shots_with_video for shot in shots):
+        raise BadRequestError("所有镜头视频生成成功后才能合成")
 
     def work(job: dict) -> tuple[dict, dict | None]:
         shot_order = {shot["id"]: shot["no"] for shot in shots}

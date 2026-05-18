@@ -165,12 +165,19 @@ def compose_context(user: dict[str, Any], episode_id: str) -> dict[str, Any] | N
     with SessionLocal() as db:
         jobs = db.scalars(
             select(AiJob)
-            .where(AiJob.episode_id == episode_id, AiJob.type == "video_shot")
+            .where(AiJob.episode_id == episode_id, AiJob.type == "video_shot", AiJob.status == "succeeded")
             .order_by(AiJob.created_at.desc())
         )
-        shot_ids = {j.shot_id for j in jobs if j.shot_id}
+        # Keep only the latest succeeded job per shot
+        seen_shots: set[str] = set()
+        unique_jobs = []
+        for j in jobs:
+            if j.shot_id and j.shot_id not in seen_shots:
+                seen_shots.add(j.shot_id)
+                unique_jobs.append(j)
+        shot_ids = {j.shot_id for j in unique_jobs}
         shots = {s.id: s for s in db.scalars(select(Shot).where(Shot.id.in_(shot_ids)))} if shot_ids else {}
-        video_jobs = [_video_job_dict(j, shots.get(j.shot_id)) for j in jobs]
+        video_jobs = [_video_job_dict(j, shots.get(j.shot_id)) for j in unique_jobs]
     context["video_jobs"] = video_jobs
     return context
 

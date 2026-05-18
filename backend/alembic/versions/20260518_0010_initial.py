@@ -22,6 +22,8 @@ depends_on = None
 CHECKS = [
     ("chk_users_role", "users", "role", ("user", "admin")),
     ("chk_users_status", "users", "status", ("active", "disabled")),
+    ("chk_projects_status", "projects", "status", ("draft", "active", "review", "completed")),
+    ("chk_episodes_status", "episodes", "status", ("draft", "storyboard_ready", "generating", "needs_review", "completed")),
     ("chk_shots_status", "shots", "status", ("pending", "generating", "completed", "failed")),
     ("chk_ai_jobs_status", "ai_jobs", "status", ("pending", "running", "succeeded", "failed", "cancelled")),
     ("chk_ai_jobs_type", "ai_jobs", "type", ("outline", "storyboard", "image_asset", "audio_asset", "video_shot", "compose", "voice_clone")),
@@ -41,6 +43,13 @@ RAW_CHECKS = [
     # image_asset / audio_asset: asset_id is set AFTER job creation (asset created inside work()),
     # so no FK constraint here — the job starts with asset_id=NULL.
     ("chk_ai_jobs_fk_voice_clone", "ai_jobs", "type <> 'voice_clone' OR asset_id IS NOT NULL"),
+    # numerical bounds
+    ("chk_users_points", "users", "points >= 0"),
+    ("chk_point_ledger_balance", "point_ledger", "balance_after >= 0"),
+    ("chk_ai_jobs_progress", "ai_jobs", "progress >= 0 AND progress <= 100"),
+    ("chk_shots_duration", "shots", "duration > 0"),
+    ("chk_episodes_duration_target", "episodes", "duration_target > 0"),
+    ("chk_video_versions_duration", "video_versions", "duration > 0"),
 ]
 
 SINGLE_INDEXES = [
@@ -158,10 +167,10 @@ def upgrade() -> None:
         "ai_jobs",
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("project_id", sa.String(), sa.ForeignKey("projects.id")),
-        sa.Column("episode_id", sa.String(), sa.ForeignKey("episodes.id")),
-        sa.Column("shot_id", sa.String(), sa.ForeignKey("shots.id")),
-        sa.Column("asset_id", sa.String(), sa.ForeignKey("assets.id")),
+        sa.Column("project_id", sa.String(), sa.ForeignKey("projects.id", ondelete="SET NULL")),
+        sa.Column("episode_id", sa.String(), sa.ForeignKey("episodes.id", ondelete="SET NULL")),
+        sa.Column("shot_id", sa.String(), sa.ForeignKey("shots.id", ondelete="SET NULL")),
+        sa.Column("asset_id", sa.String(), sa.ForeignKey("assets.id", ondelete="SET NULL")),
         sa.Column("type", sa.String(length=32), nullable=False),
         sa.Column("provider", sa.String(length=64), nullable=False),
         sa.Column("provider_task_id", sa.String(length=160)),

@@ -752,7 +752,7 @@ def seed_data() -> dict[str, Any]:
                 "description": "身份揭露开头 / 15s / 待审核",
                 "duration": 15,
                 "ratio": "9:16",
-                "status": "review",
+                "status": "exported",
                 "theme": "blue",
                 "created_at": ts,
             },
@@ -790,7 +790,6 @@ def seed_data() -> dict[str, Any]:
             "export_used": 126,
             "team_members": 2,
         },
-        "users": default_users(),
         "point_ledger": [
             {
                 "id": "ledger_admin_init",
