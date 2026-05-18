@@ -38,8 +38,8 @@ RAW_CHECKS = [
     ("chk_ai_jobs_fk_video_shot", "ai_jobs", "type <> 'video_shot' OR (shot_id IS NOT NULL AND episode_id IS NOT NULL)"),
     ("chk_ai_jobs_fk_compose", "ai_jobs", "type <> 'compose' OR episode_id IS NOT NULL"),
     ("chk_ai_jobs_fk_storyboard", "ai_jobs", "type <> 'storyboard' OR episode_id IS NOT NULL"),
-    ("chk_ai_jobs_fk_image_asset", "ai_jobs", "type <> 'image_asset' OR asset_id IS NOT NULL"),
-    ("chk_ai_jobs_fk_audio_asset", "ai_jobs", "type <> 'audio_asset' OR asset_id IS NOT NULL"),
+    # image_asset / audio_asset: asset_id is set AFTER job creation (asset created inside work()),
+    # so no FK constraint here — the job starts with asset_id=NULL.
     ("chk_ai_jobs_fk_voice_clone", "ai_jobs", "type <> 'voice_clone' OR asset_id IS NOT NULL"),
 ]
 
