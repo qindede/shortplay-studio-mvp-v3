@@ -24,7 +24,23 @@ CHECKS = [
     ("chk_users_status", "users", "status", ("active", "disabled")),
     ("chk_shots_status", "shots", "status", ("pending", "generating", "completed", "failed")),
     ("chk_ai_jobs_status", "ai_jobs", "status", ("pending", "running", "succeeded", "failed", "cancelled")),
+    ("chk_ai_jobs_type", "ai_jobs", "type", ("outline", "storyboard", "image_asset", "audio_asset", "video_shot", "compose", "voice_clone")),
+    ("chk_assets_type", "assets", "type", ("character", "scene", "image", "audio")),
+    ("chk_assets_voice_status", "assets", "voice_status", ("uploaded", "pending", "generating", "completed", "failed")),
+    ("chk_asset_references_type", "asset_references", "type", ("image", "audio")),
+    ("chk_point_ledger_type", "point_ledger", "type", ("init", "register_bonus", "consume", "refund", "admin_adjust")),
     ("chk_video_versions_status", "video_versions", "status", ("exported", "archived")),
+]
+
+# Complex CHECK constraints that can't be expressed as simple IN lists
+RAW_CHECKS = [
+    # AiJob type → required FK
+    ("chk_ai_jobs_fk_video_shot", "ai_jobs", "type <> 'video_shot' OR (shot_id IS NOT NULL AND episode_id IS NOT NULL)"),
+    ("chk_ai_jobs_fk_compose", "ai_jobs", "type <> 'compose' OR episode_id IS NOT NULL"),
+    ("chk_ai_jobs_fk_storyboard", "ai_jobs", "type <> 'storyboard' OR episode_id IS NOT NULL"),
+    ("chk_ai_jobs_fk_image_asset", "ai_jobs", "type <> 'image_asset' OR asset_id IS NOT NULL"),
+    ("chk_ai_jobs_fk_audio_asset", "ai_jobs", "type <> 'audio_asset' OR asset_id IS NOT NULL"),
+    ("chk_ai_jobs_fk_voice_clone", "ai_jobs", "type <> 'voice_clone' OR asset_id IS NOT NULL"),
 ]
 
 SINGLE_INDEXES = [
@@ -198,10 +214,20 @@ def upgrade() -> None:
     # --- check constraints ---
     for name, table, column, values in CHECKS:
         in_clause = ", ".join(f"'{v}'" for v in values)
-        op.execute(f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({column} IN ({in_clause}))")
+        # voice_status is nullable; allow NULL alongside the IN list
+        if column == "voice_status":
+            op.execute(f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({column} IS NULL OR {column} IN ({in_clause}))")
+        else:
+            op.execute(f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({column} IN ({in_clause}))")
+
+    for name, table, expr in RAW_CHECKS:
+        op.execute(f"ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({expr})")
 
 
 def downgrade() -> None:
+    for name, table, _expr in reversed(RAW_CHECKS):
+        op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {name}")
+
     for name, table, _column, _values in reversed(CHECKS):
         op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {name}")
 
